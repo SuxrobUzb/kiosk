@@ -2671,3 +2671,77 @@ Sana va vaqt: 28.05.2025, 11:32:02
 И QRcode
 
 Печать происходить через браузер. Как CTRL+P и подтвердить но автоматизировано сразу же после выбора услуг печатать.
+
+Нужно добавить и export отчётов по услугам и операторов в excel файл. Напримерь:
+Umumiy	Jami	Noyabr	Dekabr	Yanvar	Fevral	Mart	Aprel	May
+Registrator ofisi” tomonidan ko‘rsatiladigan xizmat turlari	7496	2022	585	1045	899	884	319	907
+Akademik (o‘quv) faoliyati bo‘yicha ko‘rsatiladigan xizmatlar	1411	204	41	210	250	178	64	64
+1. QR kodli diplom shakllantirish;	20	0	10	10	0	0	0	0
+2. Akademik maʼlumotnoma va transkript berish;	83	0	15	26	32	6	2	2
+3. Akademik mobillik asosida boshqa oliy taʼlim tashkilotiga ketgan talabalarning hujjatlarini tegishli tartibda rasmiylashtirish;	13	0	0	6	7	0	0	0
+4. Bitiruvchi talabalar uchun aylanma varaqa yaratish;	30	0	0	20	0	0	0	10
+5. Diplom dublikatini olish uchun ariza yuborishga koʻmaklashish;	0	0	0	0	0	0	0	0
+6. Imtihon natijalari boʻyicha apellyatsiya arizalarini qabul qilishni tashkil qilish;	46	0	0	46	0	0	0	0
+7. Imtihonlar roʻyxatini shakllantirish va talabaga taqdim etish;	44	2	0	0	6	10	13	13
+8. Oliy taʼlim tashkilotlari talabalariga oʻqishni koʻchirish va qayta tiklash uchun ariza yuborishga koʻmaklashish;	11	0	0	0	11	0	0	0
+9. Oliy taʼlim tashkilotlariga ikkinchi taʼlimga kirish uchun abituriyentlarga onlayn ariza topshirishiga koʻmaklashish;	0	0	0	0	0	0	0	0
+10.  Oliy taʼlim tashkilotlarining magistratura bosqichiga kirish uchun abituriyentlarga onlayn ariza topshirishiga koʻmaklashish;	0	0	0	0	0	0	0	0
+11. Oliy taʼlim olganlik haqidagi diplom maʼlumotlarini qoʻshish yoki tahrirlash uchun talabgorlarga ariza yuborishga koʻmaklashish;	0	0	0	0	0	0	0	0
+12. Stipendiya va turli grant tanlovlarida ishtirok etish uchun ariza qabul qilish;	0	0	0	0	0	0	0	0
+13. Talabaga oʻzining GPA koʻrsatkichi haqida maʼlumotnoma taqdim etish;	5	5	0	0	0	0	0	0
+14. Talabalar davomatini amaldagi tartibga asosan sababli va sababsiz holatga oʻtkazish;	374	0	0	37	37	83	136	81
+15. Talaba uzrli sabablarga ko‘ra (kasal, yaqin qarindoshining betobligi yoki vafoti, tug‘ruq holati kabilar) oraliq va (yoki) yakuniy nazorat turiga kirmagan talabalar uchun tegishli fanlardan shaxsiy grafik yaratish;	30	0	0	0	26	1	2	1
+16. Talabalar hujjatlarini qabul qilish va arxivga topshirish;	11	0	0	0	11	0	0	0
+17. Talabalarga imtihon natijalarini taqdim etish;	94	0	0	45	49	0	0	0
+18. Talabalarga qayta oʻqish uchun ariza berishga koʻmaklashish;	110	0	0	0	0	36	48	26
+19. Talabalarga turli xil maʼlumotnoma (oʻqish joyidan, harbiy boʻlimdan v.b.)lar berish;	16	15	0	0	0	1	0	0
+20. Talabalarga oʻquv varaqa taqdim etish;	0	0	0	0	0	0	0	0
+21. Talabalarga fan resurslari boʻyicha maʼlumot taqdim etish;	5	5	0	0	0	0	0	0
+22. Talabalarni HEMIS platformasida keyingi kursga oʻtkazish;	0	0	0	0	0	0	0	0
+23. Talabalarni oʻzlashtirish koʻrsatkichlari haqida maʼlumot taqdim etish;	192	110	0	0	42	16	8	16
+24. Talabalarning joriy, oraliq va davomat natijalariga koʻra yakuniy nazoratlarda ishtirok etishiga ruxsat berish;	15	0	0	0	0	3	8	4
+25. Talabalarning parolini tiklash;	276	59	16	20	10	57	51	63
+26. Talabalarning tyutorlar tomonidan to‘g‘ri to‘ldirilgan shaxsiy hamda oʻquv maʼlumotlarini tahrirlash;	0	0	0	0	0	0	0	0
+27. Talabalik guvohnomasini tayyorlash va talabalarga taqdim etish;	14	0	0	0	5	9	0	0
+28. Talabani bir guruhdan ikkinchi guruhga koʻchirib oʻtkazish;	0	0	0	0	0	0	0	0
+29. Tashqi xizmatlar: Ijtimoiy himoya reyestri va ayollar daftarida turuvchi talabalar yagona reestri bazasidan sinxronizatsiya qilib roʻyxat shakllantirish;	1	1	0	0	0	0	0	0
+30. Oʻqishini koʻchirishga tavsiya etilgan, o‘qishga tiklangan yoki kursda qolgan talabalarning o‘quv rejalaridagi fanlar farqini aniqlash;	16	2	0	0	14	0	0	0
+31. Oʻquv dasturlari haqida maʼlumot berish.	5	5	0	0	0	0	0	0
+	0	0	0	0	0	0	0	0
+Yoshlar masalalari va ma’naviy-ma’rifiy faoliyat bo‘yicha ko‘rsatiladigan xizmatlar	1805	603	349	374	316	163	0	0
+1. Talabalarga yotoqxonalarga joylashish uchun ariza berishga koʻmaklashish;	1570	594	345	322	213	96	0	0
+2. Ijara subsidiyasi uchun ariza yozishga koʻmaklashish	235	9	4	52	103	67	0	0
+								
+Xalqaro aloqalar faoliyati bo‘yicha ko‘rsatiladigan xizmatlar	30	8	12	7	0	3	0	0
+1. Talabalarga oʻqish joyidan ingliz tilida maʼlumotnoma berish;	4	4	0	0	0	0	0	0
+2. Turli xalqaro grantlar va akademik mobillik dasturlari boʻyicha maʼlumotlarni taqdim etish;	11	0	6	5	0	0	0	0
+3. Oʻqishga qabul qilingan xorijlik talabalarni elektron tizimda roʻyxatga olish va fanlarga biriktirish;	1	0	0	1	0	0	0	0
+4. Xorijiy oliygohlarda tahsil olishda konsultatsiya berish;	13	4	6	0	0	3	0	0
+5. Xorijlik talabalar uchun viza xizmatlarini amalga oshirish;	0	0	0	0	0	0	0	0
+6. Xorijlik talabalarga toʻlov-shartnomalarini taqdim etish;	1	0	0	1	0	0	0	0
+7. Xorijlik talabalarni Oʻzbekiston Respublikasida vaqtinchalik roʻyxatga qoʻyish xizmatlarini amalga oshirish;	0	0	0	0	0	0	0	0
+8. Xorijlik talabalarni oʻqishga qabul qilish boʻyicha konsultatsiya berish, ariza va talab etiladigan hujjatlarni koʻrib chiqish uchun qabul qilish.	0	0	0	0	0	0	0	0
+								
+Buxgalteriya va marketing boʻyicha koʻrsatiladigan xizmatlar	3448	1066	166	303	203	274	718	718
+1. Qayta oʻqishga shartnoma berish;	646	0	0	0	0	0	323	323
+2. Stipendiya toʻgʻrisida maʼlumotnoma berish;	145	14	0	89	18	10	7	7
+3. Hisob varagʻini shakllantirib berish;	40	0	0	4	2	0	17	17
+4. Talabalarga toʻlov-shartnomasi olish uchun ariza berishga koʻmaklashish;	827	771	13	4	7	6	13	13
+5. Talabaning yotoqxonalarga joylashish shartnomasi boʻyicha qarzdorligi va haqdorligi haqida maʼlumot berish;	444	96	42	44	64	50	74	74
+6. Talabaning qayta oʻqish shartnomasi boʻyicha qarzdorligi va haqdorligi haqida maʼlumot berish;	114	0	0	0	17	29	34	34
+7. Talabaning toʻlov-shartnomasi boʻyicha qarzdorligi va haqdorligi haqida maʼlumot berish;	895	183	107	156	95	174	90	90
+8. Toʻlov-shartnoma summasi haqida maʼlumot berish;	25	2	4	6	0	5	4	4
+9. Bitiruvchi talabalarga boʻlgʻusi ish oʻrni toʻgʻrisida kengroq axborotlar berish, mehnat yarmarkalarni oʻtkazishga koʻmaklashish	312	0	0	0	0	0	156	156
+								
+Ilmiy faoliyat bo‘yicha ko‘rsatiladigan xizmatlar	49	0	0	33	5	11	0	0
+1. Grantlar va tanlovlar haqida maʼlumot berish;	23	0	0	7	5	11	0	0
+2. Ilmiy konferensiyalar haqida maʼlumot berish;	21	0	0	21	0	0	0	0
+3. Innovatsion gʻoya va startaplarni roʻyxatdan oʻtkazishga koʻmaklashish;	0	0	0	0	0	0	0	0
+4. Nomdor stipendiyalar haqida maʼlumot berish;	5	0	0	5	0	0	0	0
+5. Ilmiy loyihalar toʻgʻrisida konsultatsiya berish;	0	0	0	0	0	0	0	0
+6. Ustoz-shogird maktabiga aʼzo boʻlishga koʻmaklashish.	0	0	0	0	0	0	0	0
+					0	0	0	
+Koʻrsatilishi zarur boʻlgan boshqa qoʻshimcha xizmatlar	753	141	17	118	125	255	125	125
+
+это всё на первом листе. Потом по месяцам, пото по оператором общей:
+Оператор, количество услуг, по каждом услуг: обслуживанние, не обслуживан, средная оценка.
