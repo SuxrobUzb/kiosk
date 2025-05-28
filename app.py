@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template, redirect, url_for, session, abort
+from flask import Flask, jsonify, request, render_template, redirect, url_for, session, abort, send_file
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from flask_session import Session
@@ -9,6 +9,10 @@ import logging
 import getpass
 from dotenv import load_dotenv
 import os
+import qrcode
+from io import BytesIO
+from escpos.printer import Usb
+import openpyxl
 
 # Загружаем переменные из .env
 load_dotenv()
@@ -26,7 +30,7 @@ SERVER_URL = os.getenv("SERVER_URL", "http://localhost:5000")
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, filename='app.log', format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Декоратор для проверки авторизации оператора
+# Декораторы для проверки авторизации
 def login_required(f):
     from functools import wraps
     @wraps(f)
@@ -36,7 +40,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# Декоратор для проверки авторизации администратора
 def admin_required(f):
     from functools import wraps
     @wraps(f)
@@ -91,6 +94,15 @@ def init_db():
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
                  username TEXT UNIQUE NOT NULL,
                  password TEXT NOT NULL)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS feedback (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 ticket_id INTEGER,
+                 operator_id INTEGER,
+                 rating INTEGER,
+                 comment TEXT,
+                 timestamp TEXT,
+                 FOREIGN KEY(ticket_id) REFERENCES tickets(id),
+                 FOREIGN KEY(operator_id) REFERENCES operators(id))''')
     conn.commit()
 
     # Проверяем наличие администратора
@@ -123,6 +135,42 @@ def get_category_depth(category_id):
     conn.close()
     return depth
 
+# Функция печати талона
+def print_ticket(ticket_id, ticket_number, service_id, operator_id, wait_time):
+    try:
+        # Предполагаем USB-принтер, замените ID на реальные
+        p = Usb(0x0416, 0x5011)  # Замените на ID вашего принтера
+        conn = sqlite3.connect('regoffice.db')
+        c = conn.cursor()
+        c.execute("SELECT name FROM services WHERE id = ?", (service_id,))
+        service_name = c.fetchone()[0]
+        operator_number = operator_id if operator_id else "N/A"
+        date_time = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
+        
+        p.text("Sizning navbatingiz\n")
+        p.text(f"Sizning navbatingiz: {ticket_number}\n")
+        p.text(f"Xizmat: {service_name}\n")
+        p.text(f"Operator raqami: {operator_number}\n")
+        p.text(f"Taxminiy kutish vaqti: {wait_time} min\n")
+        p.text(f"Sana va vaqt: {date_time}\n")
+        
+        # Генерация QR-кода
+        feedback_url = f"{SERVER_URL}/feedback/{ticket_id}"
+        qr = qrcode.QRCode(version=1, box_size=10, border=4)
+        qr.add_data(feedback_url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        img_buffer = BytesIO()
+        img.save(img_buffer, format="PNG")
+        img_buffer.seek(0)
+        p.image(img_buffer)
+        
+        p.cut()
+        p.close()
+        conn.close()
+    except Exception as e:
+        logging.error(f"Ошибка при печати талона: {e}")
+
 @app.route('/')
 def index():
     return render_template('index.html', server_url=SERVER_URL)
@@ -145,21 +193,18 @@ def get_services(category_id):
     conn = sqlite3.connect('regoffice.db')
     c = conn.cursor()
     
-    # Получаем подкатегории
     c.execute("SELECT id, name, parent_id FROM categories WHERE parent_id = ? LIMIT ? OFFSET ?", 
               (category_id, per_page, offset))
     subcategories = [{"id": row[0], "name": row[1], "isCategory": True, "isSubcategory": row[2] is not None} for row in c.fetchall()]
     c.execute("SELECT COUNT(*) FROM categories WHERE parent_id = ?", (category_id,))
     total_subcategories = c.fetchone()[0]
     
-    # Получаем услуги
     c.execute("SELECT id, name, category_id FROM services WHERE category_id = ? LIMIT ? OFFSET ?", 
               (category_id, per_page, offset))
     services = [{"id": row[0], "name": row[1], "isCategory": False, "isSubcategory": False, "category_id": row[2]} for row in c.fetchall()]
     c.execute("SELECT COUNT(*) FROM services WHERE category_id = ?", (category_id,))
     total_services = c.fetchone()[0]
     
-    # Объединяем подкатегории и услуги
     items = subcategories + services
     total = total_subcategories + total_services
     
@@ -190,22 +235,147 @@ def get_ticket():
     avg_time = c.fetchone()[0] or 5
     wait_time = round(avg_time * count / 60)
     
-    # Автоматическое назначение оператора
     c.execute("SELECT operator_id FROM operator_services WHERE service_id = ? LIMIT 1", (service_id,))
     operator = c.fetchone()
     operator_id = operator[0] if operator else None
     
     c.execute("INSERT INTO tickets (number, service_id, status, operator_id, created_at, kiosk_id) VALUES (?, ?, 'waiting', ?, ?, ?)", 
               (ticket_number, service_id, operator_id, datetime.now().isoformat(), kiosk_id))
+    ticket_id = c.lastrowid
     conn.commit()
+    
+    qr_url = f"{SERVER_URL}/qr/{ticket_id}"
     
     # Уведомление через WebSocket
     socketio.emit('new_ticket', {'ticket': ticket_number, 'service_id': service_id, 'operator_id': operator_id})
     logging.info(f"New ticket created: {ticket_number} for service {service_id}, assigned to operator {operator_id or 'None'}")
     
+    # Печать талона
+    print_ticket(ticket_id, ticket_number, service_id, operator_id, wait_time)
+    
     conn.close()
-    return jsonify({"ticket": ticket_number, "wait_time": wait_time})
+    return jsonify({"ticket": ticket_number, "wait_time": wait_time, "ticket_id": ticket_id, "qr_url": qr_url})
 
+@app.route('/qr/<int:ticket_id>', methods=['GET'])
+def get_qr_code(ticket_id):
+    feedback_url = f"{SERVER_URL}/feedback/{ticket_id}"
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(feedback_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    img_buffer = BytesIO()
+    img.save(img_buffer, format="PNG")
+    img_buffer.seek(0)
+    return send_file(img_buffer, mimetype='image/png')
+
+@app.route('/feedback/<int:ticket_id>', methods=['GET'])
+def feedback_form(ticket_id):
+    conn = sqlite3.connect('regoffice.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,))
+    ticket = c.fetchone()
+    if not ticket:
+        conn.close()
+        return "Талон не найден", 404
+    c.execute("SELECT * FROM feedback WHERE ticket_id = ?", (ticket_id,))
+    feedback = c.fetchone()
+    if feedback:
+        conn.close()
+        return "Отзыв уже отправлен", 400
+    conn.close()
+    return render_template('feedback.html', ticket_id=ticket_id)
+
+@app.route('/submit_feedback', methods=['POST'])
+def submit_feedback():
+    ticket_id = request.form.get('ticket_id')
+    rating = request.form.get('rating')
+    comment = request.form.get('comment')
+    conn = sqlite3.connect('regoffice.db')
+    c = conn.cursor()
+    c.execute("SELECT operator_id FROM tickets WHERE id = ?", (ticket_id,))
+    operator_id = c.fetchone()[0]
+    timestamp = datetime.now().isoformat()
+    c.execute("INSERT INTO feedback (ticket_id, operator_id, rating, comment, timestamp) VALUES (?, ?, ?, ?, ?)", 
+              (ticket_id, operator_id, rating, comment, timestamp))
+    conn.commit()
+    conn.close()
+    return "Отзыв успешно отправлен"
+
+@app.route('/export_overall_report', methods=['GET'])
+@admin_required
+def export_overall_report():
+    conn = sqlite3.connect('regoffice.db')
+    c = conn.cursor()
+    c.execute("""
+        SELECT 
+            s.name AS service_name,
+            strftime('%Y-%m', t.created_at) AS month,
+            COUNT(*) AS count
+        FROM 
+            tickets t
+        JOIN 
+            services s ON t.service_id = s.id
+        WHERE 
+            t.status = 'finished'
+        GROUP BY 
+            s.name, month
+        ORDER BY 
+            month, s.name
+    """)
+    data = c.fetchall()
+    conn.close()
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Overall Report"
+    ws.append(["Service", "Month", "Count"])
+    for row in data:
+        ws.append(row)
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                     download_name='overall_report.xlsx', as_attachment=True)
+
+@app.route('/export_operator_report', methods=['GET'])
+@admin_required
+def export_operator_report():
+    conn = sqlite3.connect('regoffice.db')
+    c = conn.cursor()
+    c.execute("""
+        SELECT 
+            o.name AS operator_name,
+            COUNT(t.id) AS total_tickets,
+            SUM(CASE WHEN t.status = 'finished' THEN 1 ELSE 0 END) AS served,
+            SUM(CASE WHEN t.status != 'finished' THEN 1 ELSE 0 END) AS not_served,
+            AVG(f.rating) AS average_rating
+        FROM 
+            operators o
+        LEFT JOIN 
+            tickets t ON o.id = t.operator_id
+        LEFT JOIN 
+            feedback f ON t.id = f.ticket_id
+        GROUP BY 
+            o.id, o.name
+    """)
+    data = c.fetchall()
+    conn.close()
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Operator Report"
+    ws.append(["Operator", "Total Tickets", "Served", "Not Served", "Average Rating"])
+    for row in data:
+        ws.append(row)
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                     download_name='operator_report.xlsx', as_attachment=True)
+
+# Остальные маршруты остаются без изменений
 @app.route('/admin_login', methods=['GET', 'POST'])
 def admin_login():
     if request.method == 'POST':
@@ -456,11 +626,9 @@ def delete_category():
     conn = sqlite3.connect('regoffice.db')
     c = conn.cursor()
     
-    # Проверяем, есть ли подкатегории
     c.execute("SELECT COUNT(*) FROM categories WHERE parent_id = ?", (category_id,))
     subcategories_count = c.fetchone()[0]
     
-    # Проверяем, есть ли услуги
     c.execute("SELECT COUNT(*) FROM services WHERE category_id = ?", (category_id,))
     services_count = c.fetchone()[0]
     

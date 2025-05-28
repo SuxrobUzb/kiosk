@@ -51,7 +51,6 @@
             transition: all 0.2s ease;
         }
         .dark .card { border-color: #4a5568; }
-        /* Added classes for visual differentiation */
         .category-card {
             background: #e6f0ff;
             border: 2px solid var(--primary);
@@ -65,15 +64,9 @@
             background: #e6ffed;
             border: 2px solid var(--secondary);
         }
-        .dark .category-card {
-            background: #2c5282;
-        }
-        .dark .subcategory-card {
-            background: #3b5998;
-        }
-        .dark .service-card {
-            background: #2f855a;
-        }
+        .dark .category-card { background: #2c5282; }
+        .dark .subcategory-card { background: #3b5998; }
+        .dark .service-card { background: #2f855a; }
         .card:hover {
             border-color: var(--primary);
             background: #eef4fd;
@@ -158,6 +151,7 @@
         .dark .ticket-container { border-color: #4a5568; }
         .ticket-container h2 { font-size: 24px; font-weight: 600; color: var(--primary); }
         .ticket-container p { font-size: 18px; margin: 10px 0; }
+        .ticket-container img { max-width: 100%; margin-top: 10px; }
         .line { border-top: 1px dashed #ccc; margin: 10px 0; }
     </style>
 </head>
@@ -182,6 +176,7 @@
         <p id="ticketWaitTime"></p>
         <div class="line"></div>
         <p id="ticketDateTime"></p>
+        <img id="ticketQR" src="" alt="QR Code">
         <button class="return-btn" onclick="returnToServices()">Xizmatlarga qaytish</button>
     </div>
     <script>
@@ -226,7 +221,7 @@
                 if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
                 const categories = await response.json();
                 console.log("Categories received:", categories);
-                categoryStack = []; // Reset stack for top-level categories
+                categoryStack = [];
                 currentPage = 1;
                 document.getElementById("ticketContainer").style.display = "none";
                 document.getElementById("content").style.display = "grid";
@@ -258,7 +253,7 @@
                     isSubcategory: item.isSubcategory
                 }));
                 if (page === 1 && !categoryStack.includes(categoryId)) {
-                    categoryStack.push(categoryId); // Only push new category on first page
+                    categoryStack.push(categoryId);
                 }
                 currentPage = data.page;
                 totalItems = data.total;
@@ -349,14 +344,14 @@
                 const data = await response.json();
                 console.log("Ticket received:", data);
                 lastTicket = { ...data, serviceName };
-                showTicket(data.ticket, serviceName, data.wait_time);
+                showTicket(data.ticket, serviceName, data.wait_time, data.ticket_id, data.qr_url);
             } catch (error) {
                 console.error("Error getting ticket:", error);
                 showNotification(`${translations[currentLang].error}: ${error.message}`);
             }
         }
 
-        function showTicket(ticket, serviceName, waitTime) {
+        function showTicket(ticket, serviceName, waitTime, ticketId, qrUrl) {
             document.getElementById("content").style.display = "none";
             document.getElementById("pagination").style.display = "none";
             document.getElementById("backButton").style.display = "none";
@@ -366,6 +361,7 @@
             document.getElementById("ticketService").innerText = `${translations[currentLang].service}: ${serviceName}`;
             document.getElementById("ticketWaitTime").innerText = `${translations[currentLang].wait}: ${waitTime} min`;
             document.getElementById("ticketDateTime").innerText = `${translations[currentLang].dateTime}: ${new Date().toLocaleString()}`;
+            document.getElementById("ticketQR").src = qrUrl;
             document.querySelector(".return-btn").innerText = translations[currentLang].return;
         }
 
@@ -385,7 +381,7 @@
                 loadCategories();
             } else {
                 categoryStack.pop();
-                loadItems(categoryStack[categoryStack.length - 1], 1); // Reset to page 1
+                loadItems(categoryStack[categoryStack.length - 1], 1);
             }
         }
 
@@ -396,7 +392,7 @@
             if (categoryStack.length === 0) {
                 loadCategories();
             } else {
-                loadItems(categoryStack[categoryStack.length - 1], 1); // Reset to page 1
+                loadItems(categoryStack[categoryStack.length - 1], 1);
             }
         }
 

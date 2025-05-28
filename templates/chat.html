@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Чат с оператором</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #chat_box { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
+        #message { width: 100%; padding: 10px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+</head>
+<body>
+    <h1>Чат с оператором</h1>
+    <div id="chat_box"></div>
+    <input type="text" id="message" placeholder="Введите сообщение">
+    <button onclick="sendMessage()">Отправить</button>
+    <script>
+        const socket = io('{{ server_url }}');
+        const ticketId = '{{ ticket_id }}';
+        socket.emit('join', { room: ticketId });
+
+        socket.on('message', function(data) {
+            const chatBox = document.getElementById('chat_box');
+            chatBox.innerHTML += `<p><strong>${data.sender}:</strong> ${data.content}</p>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        function sendMessage() {
+            const message = document.getElementById('message').value;
+            if (message) {
+                socket.emit('message', { room: ticketId, sender: 'client', content: message });
+                document.getElementById('message').value = '';
+            }
+        }
+    </script>
+</body>
+</html>
