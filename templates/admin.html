@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin paneli</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fa;
+            color: #2d3748;
+            padding: 40px;
+        }
+        :root {
+            --bg: #f4f7fa;
+            --text: #2d3748;
+            --card-bg: #ffffff;
+            --primary: #1a73e8;
+            --secondary: #34c759;
+            --danger: #e53e3e;
+        }
+        body.dark {
+            --bg: #1a202c;
+            --text: #e2e8f0;
+            --card-bg: #2d3748;
+            --primary: #63b3ed;
+            --secondary: #68d391;
+            --danger: #f56565;
+        }
+        body {
+            background: var(--bg);
+            color: var(--text);
+        }
+        h1 { text-align: center; font-size: 32px; font-weight: 600; color: var(--primary); margin-bottom: 40px; }
+        .section { background: var(--card-bg); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+        h2 { font-size: 20px; font-weight: 600; color: var(--primary); margin-bottom: 16px; }
+        form { display: flex; gap: 12px; margin-bottom: 20px; }
+        input, select {
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            flex: 1;
+            outline: none;
+            background: #ffffff;
+            color: var(--text);
+        }
+        .dark input, .dark select { background: #4a5568; border-color: #718096; }
+        input:focus, select:focus { border-color: var(--primary); }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .add-btn { background: var(--secondary); }
+        .add-btn:hover { background: #2fb34e; }
+        .edit-btn { background: var(--primary); }
+        .edit-btn:hover { background: #1666c5; }
+        .delete-btn { background: var(--danger); }
+        .delete-btn:hover { background: #c53030; }
+        .assign-btn { background: #ed8936; }
+        .assign-btn:hover { background: #dd6b20; }
+        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; }
+        th, td { padding: 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        .dark th, .dark td { border-bottom: 1px solid #4a5568; }
+        th { background: var(--primary); color: #ffffff; font-weight: 600; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: #f7fafc; }
+        .dark tr:hover { background: #4a5568; }
+        .controls { text-align: center; margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
+        .lang-btn, .theme-toggle {
+            padding: 6px 12px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #4a5568;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .dark .lang-btn, .dark .theme-toggle { background: #2d3748; border-color: #4a5568; color: #e2e8f0; }
+        .lang-btn:hover, .theme-toggle:hover { background: #eef4fd; }
+        .dark .lang-btn:hover, .dark .theme-toggle:hover { background: #4a5568; }
+        .lang-btn.active { background: var(--primary); color: #ffffff; border-color: var(--primary); }
+        .stats { margin-top: 20px; font-size: 16px; }
+        .service-assign { margin-top: 10px; display: flex; gap: 12px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+</head>
+<body>
+    <div class="controls">
+        <button class="lang-btn active" onclick="setLanguage('uz_lat')">Uz (Lat)</button>
+        <button class="lang-btn" onclick="setLanguage('uz_cyr')">Ўз (Кирилл)</button>
+        <button class="lang-btn" onclick="setLanguage('ru')">Ру</button>
+        <button class="lang-btn" onclick="setLanguage('en')">En</button>
+        <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+        <button class="lang-btn" onclick="logout()">Chiqish</button>
+    </div>
+    <h1 id="title">Admin paneli</h1>
+    <div class="section">
+        <h2 id="categories_title">Kategoriyalar</h2>
+        <form method="POST" action="/add_category">
+            <input type="text" name="name" placeholder="Kategoriya nomi">
+            <select name="parent_id">
+                <option value="">Hech qaysi (asosiy kategoriya)</option>
+                {% for cat in categories %}
+                    <option value="{{ cat[0] }}">{{ cat[1] }} (ID: {{ cat[0] }})</option>
+                {% endfor %}
+            </select>
+            <button class="add-btn" type="submit">Qo‘shish</button>
+        </form>
+        <table>
+            <tr><th>ID</th><th>Nomi</th><th>Yuqori kategoriya</th><th>Amallar</th></tr>
+            {% for category in categories %}
+                <tr>
+                    <td>{{ category[0] }}</td>
+                    <td>{{ category[1] }}</td>
+                    <td>{{ category[2] or "Yo‘q" }}</td>
+                    <td>
+                        <button class="edit-btn" onclick="editCategory({{ category[0] }}, '{{ category[1] }}')">Tahrirlash</button>
+                        <button class="delete-btn" onclick="deleteCategory({{ category[0] }})">O‘chirish</button>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="section">
+        <h2 id="services_title">Xizmatlar</h2>
+        <form method="POST" action="/add_service" id="addServiceForm">
+            <input type="text" name="name" placeholder="Xizmat nomi">
+            <select name="category_id">
+                <option value="">Kategoriyani tanlang</option>
+                {% for cat in categories %}
+                    <option value="{{ cat[0] }}">{{ cat[1] }} (ID: {{ cat[0] }})</option>
+                {% endfor %}
+            </select>
+            <button class="add-btn" type="submit">Qo‘shish</button>
+        </form>
+        <table>
+            <tr><th>ID</th><th>Nomi</th><th>Kategoriya</th><th>Amallar</th></tr>
+            {% for service in services %}
+                <tr>
+                    <td>{{ service[0] }}</td>
+                    <td>{{ service[1] }}</td>
+                    <td>{{ service[2] }}</td>
+                    <td>
+                        <button class="edit-btn" onclick="editService({{ service[0] }}, '{{ service[1] }}')">Tahrirlash</button>
+                        <button class="delete-btn" onclick="deleteService({{ service[0] }})">O‘chirish</button>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="section">
+        <h2 id="operators_title">Operatorlar</h2>
+        <form method="POST" action="/add_operator">
+            <input type="text" name="name" placeholder="Operator ismi">
+            <input type="password" name="password" placeholder="Parol">
+            <button class="add-btn" type="submit">Qo‘shish</button>
+        </form>
+        <table>
+            <tr><th>ID</th><th>Ism</th><th>Holati</th><th>Xizmatlar</th><th>Amallar</th></tr>
+            {% for operator in operators %}
+                <tr>
+                    <td>{{ operator[0] }}</td>
+                    <td>{{ operator[1] }}</td>
+                    <td>{{ operator[2] }}</td>
+                    <td>
+                        <div class="service-assign">
+                            <select onchange="assignService({{ operator[0] }}, this.value)">
+                                <option value="">Xizmat tanlash</option>
+                                {% for service in services %}
+                                    <option value="{{ service[0] }}">{{ service[1] }}</option>
+                                {% endfor %}
+                            </select>
+                            <button class="assign-btn" onclick="unassignService({{ operator[0] }})">O‘chirish</button>
+                        </div>
+                        <ul>
+                            {% for os in operator_services if os[0] == operator[0] %}
+                                {% for service in services if service[0] == os[1] %}
+                                    <li>{{ service[1] }}</li>
+                                {% endfor %}
+                            {% endfor %}
+                        </ul>
+                    </td>
+                    <td>
+                        <button class="edit-btn" onclick="editOperator({{ operator[0] }}, '{{ operator[1] }}', '{{ operator[2] }}')">Tahrirlash</button>
+                        <button class="delete-btn" onclick="deleteOperator({{ operator[0] }})">O‘chirish</button>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="section">
+        <h2 id="analytics_title">Analitika</h2>
+        <div class="stats">
+            <p id="waiting">Kutayotganlar: {{ waiting|length }}</p>
+            <p id="avg_time">O‘rtacha xizmat vaqti: {{ avg_time }} daqiqa</p>
+        </div>
+        <h3 id="waiting_title">Kutayotgan mijozlar</h3>
+        <table>
+            <tr><th>Navbat</th><th>Xizmat</th></tr>
+            {% for ticket in waiting %}
+                <tr><td>{{ ticket[0] }}</td><td>{{ ticket[1] }}</td></tr>
+            {% endfor %}
+        </table>
+        <h3 id="finished_title">Tugatilgan navbatlar</h3>
+        <table>
+            <tr><th>Navbat</th><th>Xizmat</th><th>Operator</th><th>Yaratildi</th><th>Tugatildi</th></tr>
+            {% for stat in stats %}
+                <tr><td>{{ stat[0] }}</td><td>{{ stat[1] }}</td><td>{{ stat[2] or 'Yo‘q' }}</td><td>{{ stat[3] }}</td><td>{{ stat[4] }}</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <script>
+        const serverUrl = "{{ server_url }}";
+        const socket = io.connect(serverUrl);
+        const translations = {
+            uz_lat: { 
+                title: "Admin paneli", categories: "Kategoriyalar", services: "Xizmatlar", 
+                operators: "Operatorlar", analytics: "Analitika", add: "Qo‘shish", edit: "Tahrirlash", 
+                delete: "O‘chirish", assign: "O‘chirish", name: "Nomi", actions: "Amallar", 
+                status: "Holati", service_name: "Xizmat nomi", operator_name: "Operator ismi", 
+                category_name: "Kategoriya nomi", none: "Yo‘q", waiting: "Kutayotganlar", 
+                avg_time: "O‘rtacha xizmat vaqti", waiting_title: "Kutayotgan mijozlar", 
+                finished_title: "Tugatilgan navbatlar"
+            },
+            uz_cyr: { 
+                title: "Админ панели", categories: "Категориялар", services: "Хизматлар", 
+                operators: "Операторлар", analytics: "Аналитика", add: "Қўшиш", edit: "Таҳрирлаш", 
+                delete: "Ўчириш", assign: "Ўчириш", name: "Номи", actions: "Амаллар", 
+                status: "Ҳолати", service_name: "Хизмат номи", operator_name: "Оператор исми", 
+                category_name: "Категория номи", none: "Йўқ", waiting: "Кутаётганлар", 
+                avg_time: "Ўртача хизмат вақти", waiting_title: "Кутаётган мижозлар", 
+                finished_title: "Тугатилган навбатлар"
+            },
+            ru: { 
+                title: "Админ-панель", categories: "Категории", services: "Услуги", 
+                operators: "Операторы", analytics: "Аналитика", add: "Добавить", edit: "Редактировать", 
+                delete: "Удалить", assign: "Удалить", name: "Название", actions: "Действия", 
+                status: "Статус", service_name: "Название услуги", operator_name: "Имя оператора", 
+                category_name: "Название категории", none: "Нет", waiting: "Ожидающих", 
+                avg_time: "Среднее время обслуживания", waiting_title: "Ожидающие клиенты", 
+                finished_title: "Завершённые талоны"
+            },
+            en: { 
+                title: "Admin Panel", categories: "Categories", services: "Services", 
+                operators: "Operators", analytics: "Analytics", add: "Add", edit: "Edit", 
+                delete: "Delete", assign: "Remove", name: "Name", actions: "Actions", 
+                status: "Status", service_name: "Service name", operator_name: "Operator name", 
+                category_name: "Category name", none: "None", waiting: "Waiting", 
+                avg_time: "Average service time", waiting_title: "Waiting clients", 
+                finished_title: "Finished tickets"
+            }
+        };
+        let currentLang = "uz_lat";
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active"));
+            document.querySelector(`button[onclick="setLanguage('${lang}')"]`).classList.add("active");
+            document.getElementById("title").innerText = translations[lang].title;
+            document.getElementById("categories_title").innerText = translations[lang].categories;
+            document.getElementById("services_title").innerText = translations[lang].services;
+            document.getElementById("operators_title").innerText = translations[lang].operators;
+            document.getElementById("analytics_title").innerText = translations[lang].analytics;
+            document.getElementById("waiting_title").innerText = translations[lang].waiting_title;
+            document.getElementById("finished_title").innerText = translations[lang].finished_title;
+            document.querySelectorAll(".add-btn").forEach(btn => btn.innerText = translations[lang].add);
+            document.querySelectorAll(".edit-btn").forEach(btn => btn.innerText = translations[lang].edit);
+            document.querySelectorAll(".delete-btn").forEach(btn => btn.innerText = translations[lang].delete);
+            document.querySelectorAll(".assign-btn").forEach(btn => btn.innerText = translations[lang].assign);
+            document.querySelector(".section:nth-child(2) table th:nth-child(2)").innerText = translations[lang].name;
+            document.querySelector(".section:nth-child(2) table th:nth-child(4)").innerText = translations[lang].actions;
+            document.querySelector(".section:nth-child(3) table th:nth-child(2)").innerText = translations[lang].name;
+            document.querySelector(".section:nth-child(3) table th:nth-child(3)").innerText = translations[lang].status;
+            document.querySelector(".section:nth-child(3) table th:nth-child(4)").innerText = translations[lang].services;
+            document.querySelector(".section:nth-child(3) table th:nth-child(5)").innerText = translations[lang].actions;
+            document.querySelector("input[name='name']").placeholder = translations[lang].service_name;
+            document.querySelector("form[action='/add_operator'] input[name='name']").placeholder = translations[lang].operator_name;
+            document.getElementById("waiting").innerText = `${translations[lang].waiting}: {{ waiting|length }}`;
+            document.getElementById("avg_time").innerText = `${translations[lang].avg_time}: {{ avg_time }} daqiqa`;
+        }
+
+        function editCategory(id, name) {
+            const newName = prompt(translations[currentLang].category_name + ":", name);
+            if (newName) {
+                fetch(`${serverUrl}/edit_category`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({id: id, name: newName})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function deleteCategory(id) {
+            if (confirm("Kategoriyani o‘chirishni tasdiqlaysizmi?")) {
+                fetch(`${serverUrl}/delete_category`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({id: id})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function editService(id, name) {
+            const newName = prompt(translations[currentLang].service_name + ":", name);
+            if (newName) {
+                fetch(`${serverUrl}/edit_service`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({id: id, name: newName})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function deleteService(id) {
+            if (confirm("Xizmatni o‘chirishni tasdiqlaysizmi?")) {
+                fetch(`${serverUrl}/delete_service`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({id: id})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function editOperator(id, name, status) {
+            const newName = prompt(translations[currentLang].operator_name + ":", name);
+            const newPassword = prompt("Yangi parol (bo‘sh qoldirish mumkin):", "");
+            const newStatus = prompt("Status (active/break):", status);
+            if (newName) {
+                fetch(`${serverUrl}/edit_operator`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({id: id, name: newName, password: newPassword, status: newStatus || status})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function deleteOperator(id) {
+            if (confirm("Operatorni o‘chirishni tasdiqlaysizmi?")) {
+                fetch(`${serverUrl}/delete_operator`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({id: id})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function assignService(operatorId, serviceId) {
+            if (serviceId) {
+                fetch(`${serverUrl}/assign_service`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({operator_id: operatorId, service_id: serviceId})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function unassignService(operatorId) {
+            const serviceId = prompt("O‘chiriladigan xizmat ID sini kiriting:");
+            if (serviceId) {
+                fetch(`${serverUrl}/unassign_service`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({operator_id: operatorId, service_id: serviceId})
+                }).then(response => response.json()).then(data => {
+                    if (data.status === "error") alert(data.message);
+                    else location.reload();
+                });
+            }
+        }
+
+        function logout() {
+            window.location.href = '/admin_logout';
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle("dark");
+            const isDark = document.body.classList.contains("dark");
+            localStorage.setItem("theme", isDark ? "dark" : "light");
+            document.querySelector(".theme-toggle").innerText = isDark ? "☀️" : "🌙";
+        }
+
+        socket.on('new_ticket', function(data) {
+            console.log("New ticket added:", data);
+            location.reload();
+        });
+
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("dark");
+            document.querySelector(".theme-toggle").innerText = "☀️";
+        }
+
+        setLanguage(currentLang);
+    </script>
+</body>
+</html>
