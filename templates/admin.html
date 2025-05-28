@@ -34,7 +34,8 @@
         h1 { text-align: center; font-size: 32px; font-weight: 600; color: var(--primary); margin-bottom: 40px; }
         .section { background: var(--card-bg); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
         h2 { font-size: 20px; font-weight: 600; color: var(--primary); margin-bottom: 16px; }
-        form { display: flex; gap: 12px; margin-bottom: 20px; }
+        form { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
+        label { font-size: 14px; color: var(--text); }
         input, select {
             padding: 12px;
             border: 1px solid #e2e8f0;
@@ -105,8 +106,10 @@
     <div class="section">
         <h2 id="categories_title">Kategoriyalar</h2>
         <form method="POST" action="/add_category">
-            <input type="text" name="name" placeholder="Kategoriya nomi">
-            <select name="parent_id">
+            <label for="category_name">Kategoriya nomi:</label>
+            <input type="text" id="category_name" name="name" placeholder="Kategoriya nomi">
+            <label for="parent_id">Yuqori kategoriya:</label>
+            <select id="parent_id" name="parent_id">
                 <option value="">Hech qaysi (asosiy kategoriya)</option>
                 {% for cat in categories %}
                     <option value="{{ cat[0] }}">{{ cat[1] }} (ID: {{ cat[0] }})</option>
@@ -132,8 +135,10 @@
     <div class="section">
         <h2 id="services_title">Xizmatlar</h2>
         <form method="POST" action="/add_service" id="addServiceForm">
-            <input type="text" name="name" placeholder="Xizmat nomi">
-            <select name="category_id">
+            <label for="service_name">Xizmat nomi:</label>
+            <input type="text" id="service_name" name="name" placeholder="Xizmat nomi">
+            <label for="category_id">Kategoriya:</label>
+            <select id="category_id" name="category_id">
                 <option value="">Kategoriyani tanlang</option>
                 {% for cat in categories %}
                     <option value="{{ cat[0] }}">{{ cat[1] }} (ID: {{ cat[0] }})</option>
@@ -159,42 +164,85 @@
     <div class="section">
         <h2 id="operators_title">Operatorlar</h2>
         <form method="POST" action="/add_operator">
-            <input type="text" name="name" placeholder="Operator ismi">
-            <input type="password" name="password" placeholder="Parol">
+            <label for="operator_name">Operator ismi:</label>
+            <input type="text" id="operator_name" name="name" placeholder="Operator ismi">
+            <label for="operator_password">Parol:</label>
+            <input type="password" id="operator_password" name="password" placeholder="Parol">
+            <label for="operator_number">Operator raqami:</label>
+            <input type="number" id="operator_number" name="operator_number" placeholder="Operator raqami">
             <button class="add-btn" type="submit">Qo‘shish</button>
         </form>
         <table>
-            <tr><th>ID</th><th>Ism</th><th>Holati</th><th>Xizmatlar</th><th>Amallar</th></tr>
+            <tr>
+                <th>ID</th>
+                <th>Ism</th>
+                <th>Holati</th>
+                <th>Operator raqami</th>
+                <th>Xizmatlar</th>
+                <th>Amallar</th>
+            </tr>
             {% for operator in operators %}
-                <tr>
-                    <td>{{ operator[0] }}</td>
-                    <td>{{ operator[1] }}</td>
-                    <td>{{ operator[2] }}</td>
+            <tr>
+                <td>{{ operator[0] }}</td>
+                <td>{{ operator[1] }}</td>
+                <td>{{ operator[2] }}</td>
+                <td>{{ operator[3] or "" }}</td>
                     <td>
                         <div class="service-assign">
-                            <select onchange="assignService({{ operator[0] }}, this.value)">
+                            <select id="service_select_{{ operator[0] }}" onchange="assignService({{ operator[0] }}, this.value)">
                                 <option value="">Xizmat tanlash</option>
                                 {% for service in services %}
                                     <option value="{{ service[0] }}">{{ service[1] }}</option>
                                 {% endfor %}
                             </select>
-                            <button class="assign-btn" onclick="unassignService({{ operator[0] }})">O‘chirish</button>
+                            <button class="assign-btn" onclick="unassignService({{ operator[0] }})">Xizmatni olib tashlash</button>
                         </div>
-                        <ul>
+                        <ul id="service_list_{{ operator[0] }}">
                             {% for os in operator_services if os[0] == operator[0] %}
                                 {% for service in services if service[0] == os[1] %}
-                                    <li>{{ service[1] }}</li>
+                                    <li data-service-id="{{ service[0] }}">{{ service[1] }}</li>
                                 {% endfor %}
                             {% endfor %}
                         </ul>
                     </td>
                     <td>
-                        <button class="edit-btn" onclick="editOperator({{ operator[0] }}, '{{ operator[1] }}', '{{ operator[2] }}')">Tahrirlash</button>
+                        <button class="edit-btn" onclick="editOperator({{ operator[0] }}, '{{ operator[1] }}', '{{ operator[2] }}', '{{ operator[3] or "" }}')">Tahrirlash</button>
                         <button class="delete-btn" onclick="deleteOperator({{ operator[0] }})">O‘chirish</button>
                     </td>
                 </tr>
             {% endfor %}
         </table>
+    </div>
+    <div class="section">
+        <h2 id="export_title">Hisobot eksport qilish</h2>
+        <form id="exportReportForm">
+            <label for="exportOperatorId">Operator:</label>
+            <select id="exportOperatorId">
+                <option value="">Barcha operatorlar</option>
+                {% for operator in operators %}
+                    <option value="{{ operator[0] }}">{{ operator[1] }}</option>
+                {% endfor %}
+            </select>
+            <label for="exportServiceId">Xizmat:</label>
+            <select id="exportServiceId">
+                <option value="">Barcha xizmatlar</option>
+                {% for service in services %}
+                    <option value="{{ service[0] }}">{{ service[1] }}</option>
+                {% endfor %}
+            </select>
+            <label for="startDate">Boshlanish sanasi:</label>
+            <input type="date" id="startDate">
+            <label for="endDate">Tugash sanasi:</label>
+            <input type="date" id="endDate">
+            <label for="reportType">Hisobot turi:</label>
+            <select id="reportType">
+                <option value="overall">Umumiy</option>
+                <option value="monthly">Oylik</option>
+                <option value="yearly">Yillik</option>
+                <option value="by_operator">Operator bo‘yicha</option>
+            </select>
+            <button class="add-btn" type="submit">Eksport qilish</button>
+        </form>
     </div>
     <div class="section">
         <h2 id="analytics_title">Analitika</h2>
@@ -213,50 +261,162 @@
         <table>
             <tr><th>Navbat</th><th>Xizmat</th><th>Operator</th><th>Yaratildi</th><th>Tugatildi</th></tr>
             {% for stat in stats %}
-                <tr><td>{{ stat[0] }}</td><td>{{ stat[1] }}</td><td>{{ stat[2] or 'Yo‘q' }}</td><td>{{ stat[3] }}</td><td>{{ stat[4] }}</td></tr>
+                <tr><td>{{ stat[0] }}</td><td>{{ stat[1] }}</td><td>{{ stat[2] or 'N/A' }}</td><td>{{ stat[3] }}</td><td>{{ stat[4] }}</td></tr>
             {% endfor %}
         </table>
     </div>
 
     <script>
         const serverUrl = "{{ server_url }}";
-        const socket = io.connect(serverUrl);
+        const socket = io(serverUrl);
         const translations = {
             uz_lat: { 
-                title: "Admin paneli", categories: "Kategoriyalar", services: "Xizmatlar", 
-                operators: "Operatorlar", analytics: "Analitika", add: "Qo‘shish", edit: "Tahrirlash", 
-                delete: "O‘chirish", assign: "O‘chirish", name: "Nomi", actions: "Amallar", 
-                status: "Holati", service_name: "Xizmat nomi", operator_name: "Operator ismi", 
-                category_name: "Kategoriya nomi", none: "Yo‘q", waiting: "Kutayotganlar", 
-                avg_time: "O‘rtacha xizmat vaqti", waiting_title: "Kutayotgan mijozlar", 
-                finished_title: "Tugatilgan navbatlar"
+                title: "Admin paneli",
+                categories: "Kategoriyalar",
+                services: "Xizmatlar",
+                operators_title: "Operatorlar",
+                analytics_title: "Analitika",
+                export_title: "Hisobot eksport qilish",
+                add: "Qo‘shish",
+                edit: "Tahrirlash",
+                delete_btn: "O‘chirish",
+                assign: "Xizmatni olib tashlash",
+                name: {
+                    category_name: "Kategoriya nomi",
+                    service: "Xizmat nomi",
+                    category_id: "Kategoriyani tanlang",
+                    operator_name: "Operator ismi",
+                    parent_id: "Yuqori kategoriya"
+                },
+                actions: "Amallar",
+                id: "ID",
+                status: "Holati",
+                none: "Yo‘q",
+                waiting: "Kutayotganlar",
+                avg_time: "O‘rtacha xizmat vaqti",
+                waiting_title: "Kutayotgan mijozlar",
+                finished_title: "Tugatilgan navbatlar",
+                export: "Eksport qilish",
+                all_operators: "Barcha operatorlar",
+                all_services: "Barcha xizmatlar",
+                start_date: "Boshlanish sanasi",
+                end_date: "Tugash sanasi",
+                report_type: "Hisobot turi",
+                overall: "Umumiy",
+                monthly: "Oylik",
+                yearly: "Yillik",
+                by_operator: "Operator bo‘yicha"
             },
             uz_cyr: { 
-                title: "Админ панели", categories: "Категориялар", services: "Хизматлар", 
-                operators: "Операторлар", analytics: "Аналитика", add: "Қўшиш", edit: "Таҳрирлаш", 
-                delete: "Ўчириш", assign: "Ўчириш", name: "Номи", actions: "Амаллар", 
-                status: "Ҳолати", service_name: "Хизмат номи", operator_name: "Оператор исми", 
-                category_name: "Категория номи", none: "Йўқ", waiting: "Кутаётганлар", 
-                avg_time: "Ўртача хизмат вақти", waiting_title: "Кутаётган мижозлар", 
-                finished_title: "Тугатилган навбатлар"
+                title: "Админ панели",
+                categories: "Категориялар",
+                services: "Хизматлар",
+                operators_title: "Операторлар",
+                analytics_title: "Аналитика",
+                export_title: "Ҳисобот экспорт қилиш",
+                add: "Қўшиш",
+                edit: "Таҳрирлаш",
+                delete_btn: "Ўчириш",
+                assign: "Хизматни олиб ташлаш",
+                name: {
+                    category_name: "Категория номи",
+                    service: "Хизмат номи",
+                    category_id: "Категорияни танланг",
+                    operator_name: "Оператор исми",
+                    parent_id: "Юқори категория"
+                },
+                actions: "Амаллар",
+                id: "ID",
+                status: "Ҳолати",
+                none: "Йўқ",
+                waiting: "Кутаётганлар",
+                avg_time: "Ўртача хизмат вақти",
+                waiting_title: "Кутаётган мижозлар",
+                finished_title: "Тугатилган навбатлар",
+                export: "Экспорт қилиш",
+                all_operators: "Барча операторлар",
+                all_services: "Барча хизматлар",
+                start_date: "Бошланиш санаси",
+                end_date: "Тугаш санаси",
+                report_type: "Ҳисобот тури",
+                overall: "Умумий",
+                monthly: "Ойлик",
+                yearly: "Йиллик",
+                by_operator: "Оператор бўйича"
             },
             ru: { 
-                title: "Админ-панель", categories: "Категории", services: "Услуги", 
-                operators: "Операторы", analytics: "Аналитика", add: "Добавить", edit: "Редактировать", 
-                delete: "Удалить", assign: "Удалить", name: "Название", actions: "Действия", 
-                status: "Статус", service_name: "Название услуги", operator_name: "Имя оператора", 
-                category_name: "Название категории", none: "Нет", waiting: "Ожидающих", 
-                avg_time: "Среднее время обслуживания", waiting_title: "Ожидающие клиенты", 
-                finished_title: "Завершённые талоны"
+                title: "Админ-панель",
+                categories: "Категории",
+                services: "Услуги",
+                operators_title: "Операторы",
+                analytics_title: "Аналитика",
+                export_title: "Экспорт отчёта",
+                add: "Добавить",
+                edit: "Редактировать",
+                delete_btn: "Удалить",
+                assign: "Удалить услугу",
+                name: {
+                    category_name: "Название категории",
+                    service: "Название услуги",
+                    category_id: "Выберите категорию",
+                    operator_name: "Имя оператора",
+                    parent_id: "Родительская категория"
+                },
+                actions: "Действия",
+                id: "ID",
+                status: "Статус",
+                none: "Нет",
+                waiting: "Ожидающие",
+                avg_time: "Среднее время обслуживания",
+                waiting_title: "Ожидающие клиенты",
+                finished_title: "Завершённые талоны",
+                export: "Экспортировать",
+                all_operators: "Все операторы",
+                all_services: "Все услуги",
+                start_date: "Дата начала",
+                end_date: "Дата окончания",
+                report_type: "Тип отчёта",
+                overall: "Общий",
+                monthly: "Месячный",
+                yearly: "Годовой",
+                by_operator: "По оператору"
             },
             en: { 
-                title: "Admin Panel", categories: "Categories", services: "Services", 
-                operators: "Operators", analytics: "Analytics", add: "Add", edit: "Edit", 
-                delete: "Delete", assign: "Remove", name: "Name", actions: "Actions", 
-                status: "Status", service_name: "Service name", operator_name: "Operator name", 
-                category_name: "Category name", none: "None", waiting: "Waiting", 
-                avg_time: "Average service time", waiting_title: "Waiting clients", 
-                finished_title: "Finished tickets"
+                title: "Admin Panel",
+                categories: "Categories",
+                services: "Services",
+                operators_title: "Operators",
+                analytics_title: "Analytics",
+                export_title: "Export Report",
+                add: "Add",
+                edit: "Edit",
+                delete_btn: "Delete",
+                assign: "Remove Service",
+                name: {
+                    category_name: "Category Name",
+                    service: "Service Name",
+                    category_id: "Select Category",
+                    operator_name: "Operator Name",
+                    parent_id: "Parent Category"
+                },
+                actions: "Actions",
+                id: "ID",
+                status: "Status",
+                none: "None",
+                waiting: "Waiting",
+                avg_time: "Average Service Time",
+                waiting_title: "Waiting Clients",
+                finished_title: "Finished Tickets",
+                export: "Export",
+                all_operators: "All Operators",
+                all_services: "All Services",
+                start_date: "Start Date",
+                end_date: "End Date",
+                report_type: "Report Type",
+                overall: "Overall",
+                monthly: "Monthly",
+                yearly: "Yearly",
+                by_operator: "By Operator"
             }
         };
         let currentLang = "uz_lat";
@@ -268,106 +428,132 @@
             document.getElementById("title").innerText = translations[lang].title;
             document.getElementById("categories_title").innerText = translations[lang].categories;
             document.getElementById("services_title").innerText = translations[lang].services;
-            document.getElementById("operators_title").innerText = translations[lang].operators;
-            document.getElementById("analytics_title").innerText = translations[lang].analytics;
+            document.getElementById("operators_title").innerText = translations[lang].operators_title;
+            document.getElementById("analytics_title").innerText = translations[lang].analytics_title;
+            document.getElementById("export_title").innerText = translations[lang].export_title;
             document.getElementById("waiting_title").innerText = translations[lang].waiting_title;
             document.getElementById("finished_title").innerText = translations[lang].finished_title;
             document.querySelectorAll(".add-btn").forEach(btn => btn.innerText = translations[lang].add);
             document.querySelectorAll(".edit-btn").forEach(btn => btn.innerText = translations[lang].edit);
-            document.querySelectorAll(".delete-btn").forEach(btn => btn.innerText = translations[lang].delete);
+            document.querySelectorAll(".delete-btn").forEach(btn => btn.innerText = translations[lang].delete_btn);
             document.querySelectorAll(".assign-btn").forEach(btn => btn.innerText = translations[lang].assign);
-            document.querySelector(".section:nth-child(2) table th:nth-child(2)").innerText = translations[lang].name;
+            document.querySelector(".section:nth-child(2) table th:nth-child(1)").innerText = translations[lang].id;
+            document.querySelector(".section:nth-child(2) table th:nth-child(2)").innerText = translations[lang].name.category_name;
+            document.querySelector(".section:nth-child(2) table th:nth-child(3)").innerText = translations[lang].name.parent_id;
             document.querySelector(".section:nth-child(2) table th:nth-child(4)").innerText = translations[lang].actions;
-            document.querySelector(".section:nth-child(3) table th:nth-child(2)").innerText = translations[lang].name;
-            document.querySelector(".section:nth-child(3) table th:nth-child(3)").innerText = translations[lang].status;
-            document.querySelector(".section:nth-child(3) table th:nth-child(4)").innerText = translations[lang].services;
-            document.querySelector(".section:nth-child(3) table th:nth-child(5)").innerText = translations[lang].actions;
-            document.querySelector("input[name='name']").placeholder = translations[lang].service_name;
-            document.querySelector("form[action='/add_operator'] input[name='name']").placeholder = translations[lang].operator_name;
+            document.querySelector(".section:nth-child(3) table th:nth-child(1)").innerText = translations[lang].id;
+            document.querySelector(".section:nth-child(3) table th:nth-child(2)").innerText = translations[lang].name.service;
+            document.querySelector(".section:nth-child(3) table th:nth-child(3)").innerText = translations[lang].name.category_id;
+            document.querySelector(".section:nth-child(3) table th:nth-child(4)").innerText = translations[lang].actions;
+            document.querySelector(".section:nth-child(4) table th:nth-child(1)").innerText = translations[lang].id;
+            document.querySelector(".section:nth-child(4) table th:nth-child(2)").innerText = translations[lang].name.operator_name;
+            document.querySelector(".section:nth-child(4) table th:nth-child(3)").innerText = translations[lang].status;
+            document.querySelector(".section:nth-child(4) table th:nth-child(4)").innerText = translations[lang].services;
+            document.querySelector(".section:nth-child(4) table th:nth-child(5)").innerText = translations[lang].actions;
+            document.querySelector("form[action='/add_category'] input[name='name']").placeholder = translations[lang].name.category_name;
+            document.querySelector("form[action='/add_service'] input[name='name']").placeholder = translations[lang].name.service;
+            document.querySelector("form[action='/add_service'] select[name='category_id'] option:first-child").innerText = translations[lang].name.category_id;
+            document.querySelector("form[action='/add_operator'] input[name='name']").placeholder = translations[lang].name.operator_name;
             document.getElementById("waiting").innerText = `${translations[lang].waiting}: {{ waiting|length }}`;
             document.getElementById("avg_time").innerText = `${translations[lang].avg_time}: {{ avg_time }} daqiqa`;
+            document.querySelector("#exportReportForm select#exportOperatorId option:first-child").innerText = translations[lang].all_operators;
+            document.querySelector("#exportReportForm select#exportServiceId option:first-child").innerText = translations[lang].all_services;
+            document.querySelector("#exportReportForm label[for='startDate']").innerText = translations[lang].start_date + ':';
+            document.querySelector("#exportReportForm label[for='endDate']").innerText = translations[lang].end_date + ':';
+            document.querySelector("#exportReportForm label[for='reportType']").innerText = translations[lang].report_type + ':';
+            document.querySelector("#exportReportForm #reportType option[value='overall']").innerText = translations[lang].overall;
+            document.querySelector("#exportReportForm #reportType option[value='monthly']").innerText = translations[lang].monthly;
+            document.querySelector("#exportReportForm #reportType option[value='yearly']").innerText = translations[lang].yearly;
+            document.querySelector("#exportReportForm #reportType option[value='by_operator']").innerText = translations[lang].by_operator;
         }
 
         function editCategory(id, name) {
-            const newName = prompt(translations[currentLang].category_name + ":", name);
+            const newName = prompt(`${translations[currentLang].name.category_name}:`, name);
             if (newName) {
                 fetch(`${serverUrl}/edit_category`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({id: id, name: newName})
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    location.reload();
+                }).catch(error => alert(error.message));
             }
         }
 
         function deleteCategory(id) {
-            if (confirm("Kategoriyani o‘chirishni tasdiqlaysizmi?")) {
+            if (confirm(`${translations[currentLang].categories} o‘chirishni tasdiqlaysizmi?`)) {
                 fetch(`${serverUrl}/delete_category`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({id: id})
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    location.reload();
+                }).catch(error => alert(error.message));
             }
         }
 
         function editService(id, name) {
-            const newName = prompt(translations[currentLang].service_name + ":", name);
+            const newName = prompt(`${translations[currentLang].name.service}:`, name);
             if (newName) {
                 fetch(`${serverUrl}/edit_service`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({id: id, name: newName})
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    location.reload();
+                }).catch(error => alert(error.message));
             }
         }
 
         function deleteService(id) {
-            if (confirm("Xizmatni o‘chirishni tasdiqlaysizmi?")) {
+            if (confirm(`${translations[currentLang].services} o‘chirishni tasdiqlaysizmi?`)) {
                 fetch(`${serverUrl}/delete_service`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({id: id})
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    location.reload();
+                }).catch(error => alert(error.message));
             }
         }
 
-        function editOperator(id, name, status) {
-            const newName = prompt(translations[currentLang].operator_name + ":", name);
+        function editOperator(id, name, status, operator_number) {
+            const newName = prompt(`${translations[currentLang].name.operator_name}:`, name);
             const newPassword = prompt("Yangi parol (bo‘sh qoldirish mumkin):", "");
             const newStatus = prompt("Status (active/break):", status);
+            const newNumber = prompt("Operator raqami:", operator_number || "");
             if (newName) {
                 fetch(`${serverUrl}/edit_operator`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({id: id, name: newName, password: newPassword, status: newStatus || status})
+                    body: JSON.stringify({
+                        id: id,
+                        name: newName,
+                        password: newPassword,
+                        status: newStatus || status,
+                        operator_number: newNumber || null
+                    })
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    location.reload();
+                }).catch(error => alert(error.message));
             }
         }
 
         function deleteOperator(id) {
-            if (confirm("Operatorni o‘chirishni tasdiqlaysizmi?")) {
+            if (confirm(`${translations[currentLang].operators_title} o‘chirishni tasdiqlaysizmi?`)) {
                 fetch(`${serverUrl}/delete_operator`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({id: id})
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    location.reload();
+                }).catch(error => alert(error.message));
             }
         }
 
@@ -378,9 +564,17 @@
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({operator_id: operatorId, service_id: serviceId})
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    // Update UI without reloading
+                    const serviceSelect = document.getElementById(`service_select_${operatorId}`);
+                    const serviceName = serviceSelect.options[serviceSelect.selectedIndex].text;
+                    const serviceList = document.getElementById(`service_list_${operatorId}`);
+                    const li = document.createElement("li");
+                    li.dataset.serviceId = serviceId;
+                    li.textContent = serviceName;
+                    serviceList.appendChild(li);
+                    serviceSelect.value = ""; // Reset select
+                }).catch(error => alert(error.message));
             }
         }
 
@@ -392,9 +586,12 @@
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({operator_id: operatorId, service_id: serviceId})
                 }).then(response => response.json()).then(data => {
-                    if (data.status === "error") alert(data.message);
-                    else location.reload();
-                });
+                    if (data.status === "error") throw new Error(data.message);
+                    // Update UI without reloading
+                    const serviceList = document.getElementById(`service_list_${operatorId}`);
+                    const li = serviceList.querySelector(`li[data-service-id="${serviceId}"]`);
+                    if (li) li.remove();
+                }).catch(error => alert(error.message));
             }
         }
 
@@ -409,17 +606,54 @@
             document.querySelector(".theme-toggle").innerText = isDark ? "☀️" : "🌙";
         }
 
-        socket.on('new_ticket', function(data) {
-            console.log("New ticket added:", data);
+        // Export form submission
+        document.getElementById("exportReportForm")?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const operatorId = document.getElementById("exportOperatorId").value || null;
+            const serviceId = document.getElementById("exportServiceId").value || null;
+            const startDate = document.getElementById("startDate").value || null;
+            const endDate = document.getElementById("endDate").value || null;
+            const reportType = document.getElementById("reportType").value;
+
+            try {
+                const response = await fetch(`${serverUrl}/export_report`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        operator_id: operatorId,
+                        service_id: serviceId,
+                        start_date: startDate,
+                        end_date: endDate,
+                        report_type: reportType
+                    })
+                });
+
+                if (!response.ok) throw new Error("Hisobotni yuklab olishda xato: " + response.statusText);
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `report_${Date.now()}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                alert(error.message);
+            }
+        });
+
+        socket.on('new_ticket', () => {
+            console.log("New ticket added");
             location.reload();
         });
 
+        // Initialize theme
         if (localStorage.getItem("theme") === "dark") {
             document.body.classList.add("dark");
             document.querySelector(".theme-toggle").innerText = "☀️";
         }
 
-        setLanguage(currentLang);
+        setLanguage("uz_lat");
     </script>
-</body>
-</html>

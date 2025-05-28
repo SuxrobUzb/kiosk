@@ -7,13 +7,13 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Inter', sans-serif;
-            background: #f4f7fa;
+            background: var(--bg);
             height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            color: #2d3748;
+            color: var(--text);
         }
         :root {
             --bg: #f4f7fa;
@@ -21,6 +21,7 @@
             --card-bg: #ffffff;
             --primary: #1a73e8;
             --secondary: #34c759;
+            --danger: #e53e3e;
         }
         body.dark {
             --bg: #1a202c;
@@ -28,10 +29,7 @@
             --card-bg: #2d3748;
             --primary: #63b3ed;
             --secondary: #68d391;
-        }
-        body {
-            background: var(--bg);
-            color: var(--text);
+            --danger: #f56565;
         }
         h1 { font-size: 36px; font-weight: 600; color: var(--primary); margin-bottom: 40px; }
         .grid {
@@ -81,7 +79,7 @@
             display: flex;
             gap: 10px;
         }
-        .lang-btn, .theme-toggle, .back-btn, .retry-btn, .page-btn, .return-btn {
+        .lang-btn, .theme-toggle, .back-btn, .retry-btn, .page-btn, .return-btn, .status-btn {
             padding: 8px 16px;
             background: #ffffff;
             border: 1px solid #e2e8f0;
@@ -91,15 +89,15 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .dark .lang-btn, .dark .theme-toggle, .dark .retry-btn, .dark .page-btn, .dark .return-btn { 
+        .dark .lang-btn, .dark .theme-toggle, .dark .retry-btn, .dark .page-btn, .dark .return-btn, .dark .status-btn { 
             background: #2d3748; 
             border-color: #4a5568; 
             color: #e2e8f0; 
         }
-        .lang-btn:hover, .theme-toggle:hover, .back-btn:hover, .retry-btn:hover, .page-btn:hover, .return-btn:hover { 
+        .lang-btn:hover, .theme-toggle:hover, .back-btn:hover, .retry-btn:hover, .page-btn:hover, .return-btn:hover, .status-btn:hover { 
             background: #eef4fd; 
         }
-        .dark .lang-btn:hover, .dark .theme-toggle:hover, .dark .retry-btn:hover, .dark .page-btn:hover, .dark .return-btn:hover { 
+        .dark .lang-btn:hover, .dark .theme-toggle:hover, .dark .retry-btn:hover, .dark .page-btn:hover, .dark .return-btn:hover, .dark .status-btn:hover { 
             background: #4a5568; 
         }
         .lang-btn.active { 
@@ -122,7 +120,7 @@
             text-align: center;
         }
         .error-message {
-            color: #e53e3e;
+            color: var(--danger);
             font-size: 18px;
             text-align: center;
             margin-top: 20px;
@@ -151,8 +149,10 @@
         .dark .ticket-container { border-color: #4a5568; }
         .ticket-container h2 { font-size: 24px; font-weight: 600; color: var(--primary); }
         .ticket-container p { font-size: 18px; margin: 10px 0; }
-        .ticket-container img { max-width: 100%; margin-top: 10px; }
+        .ticket-container img { max-width: 150px; margin-top: 10px; }
         .line { border-top: 1px dashed #ccc; margin: 10px 0; }
+        .ticket-buttons { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        iframe#printFrame { display: none; }
     </style>
 </head>
 <body>
@@ -173,42 +173,52 @@
         <div class="line"></div>
         <p id="ticketNumber"></p>
         <p id="ticketService"></p>
+        <p id="ticketOperator"></p>
         <p id="ticketWaitTime"></p>
         <div class="line"></div>
         <p id="ticketDateTime"></p>
         <img id="ticketQR" src="" alt="QR Code">
-        <button class="return-btn" onclick="returnToServices()">Xizmatlarga qaytish</button>
+        <div class="ticket-buttons">
+            <button class="status-btn" onclick="viewStatus()">Navbat holatini ko‘rish</button>
+            <button class="return-btn" onclick="returnToServices()">Xizmatlarga qaytish</button>
+        </div>
     </div>
+    <iframe id="printFrame"></iframe>
     <script>
         const translations = {
             uz_lat: { 
                 title: "Xizmat tanlash", ticket: "Sizning navbatingiz", wait: "Taxminiy kutish vaqti", 
                 error: "Xatolik yuz berdi", no_items: "Hech narsa topilmadi", back: "Orqaga", 
                 retry: "Qayta urinish", prev: "Oldingi", next: "Keyingi", service: "Xizmat", 
-                dateTime: "Sana va vaqt", return: "Xizmatlarga qaytish"
+                dateTime: "Sana va vaqt", return: "Xizmatlarga qaytish", status: "Navbat holatini ko‘rish",
+                printing: "Talon chop etilmoqda...", print_error: "Chop etishda xato yuz berdi!"
             },
             uz_cyr: { 
                 title: "Хизмат танлаш", ticket: "Сизнинг навбатингиз", wait: "Тахминий кутиш вақти", 
                 error: "Хатолик юз берди", no_items: "Ҳеч нарса топилмади", back: "Оръага",
                 retry: "Қайта уриниш", prev: "Олдинги", next: "Кейинги", service: "Хизмат", 
-                dateTime: "Сана ва вақт", return: "Хизматларга қайтиш"
+                dateTime: "Сана ва вақт", return: "Хизматларга қайтиш", status: "Навбат ҳолатини кўриш",
+                printing: "Талон чоп этилмоқда...", print_error: "Чоп этишда хато юз берди!"
             },
             ru: { 
                 title: "Выберите услугу", ticket: "Ваш талон", wait: "Примерное время ожидания", 
                 error: "Произошла ошибка", no_items: "Ничего не найдено", back: "Назад", 
                 retry: "Повторить попытку", prev: "Предыдущая", next: "Следующая", service: "Услуга", 
-                dateTime: "Дата и время", return: "Вернуться к услугам"
+                dateTime: "Дата и время", return: "Вернуться к услугам", status: "Посмотреть статус очереди",
+                printing: "Талон печатается...", print_error: "Ошибка при печати!"
             },
             en: { 
                 title: "Select a service", ticket: "Your ticket", wait: "Estimated wait time", 
                 error: "An error occurred", no_items: "Nothing found", back: "Back", 
                 retry: "Retry", prev: "Previous", next: "Next", service: "Service", 
-                dateTime: "Date and time", return: "Return to services"
+                dateTime: "Date and time", return: "Return to services", status: "View queue status",
+                printing: "Ticket is being printed...", print_error: "Printing error occurred!"
             }
         };
         let currentLang = "uz_lat";
         const serverUrl = "{{ server_url }}";
-        const kioskId = 1;
+        // Исправлено: если kiosk_id не передан, будет 1
+        const kioskId = {{ kiosk_id if kiosk_id is defined else 1 }};
         let lastTicket = null;
         let categoryStack = [];
         let currentPage = 1;
@@ -220,17 +230,15 @@
                 const response = await fetch(`${serverUrl}/categories`);
                 if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
                 const categories = await response.json();
-                console.log("Categories received:", categories);
                 categoryStack = [];
                 currentPage = 1;
                 document.getElementById("ticketContainer").style.display = "none";
                 document.getElementById("content").style.display = "grid";
                 document.getElementById("pagination").style.display = "flex";
-                renderItems(categories.map(item => ({ id: item.id, name: item.name, isCategory: true, isSubcategory: false })));
+                renderItems(categories);
                 document.getElementById("backButton").style.display = "none";
                 renderPagination(categories.length);
             } catch (error) {
-                console.error("Error loading categories:", error);
                 document.getElementById("content").innerHTML = `
                     <div class="error-message">
                         <p>${translations[currentLang].error}: ${translations[currentLang].no_items}</p>
@@ -245,13 +253,6 @@
                 const response = await fetch(`${serverUrl}/services/${categoryId}?page=${page}`);
                 if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
                 const data = await response.json();
-                console.log("Items received for category", categoryId, ":", data);
-                const processedItems = data.items.map(item => ({
-                    id: item.id,
-                    name: item.name,
-                    isCategory: item.isCategory,
-                    isSubcategory: item.isSubcategory
-                }));
                 if (page === 1 && !categoryStack.includes(categoryId)) {
                     categoryStack.push(categoryId);
                 }
@@ -261,12 +262,11 @@
                 document.getElementById("ticketContainer").style.display = "none";
                 document.getElementById("content").style.display = "grid";
                 document.getElementById("pagination").style.display = "flex";
-                renderItems(processedItems);
+                renderItems(data.items);
                 document.getElementById("backButton").style.display = categoryStack.length > 0 ? "block" : "none";
                 document.getElementById("backButton").innerText = translations[currentLang].back;
                 renderPagination(totalItems, categoryId);
             } catch (error) {
-                console.error("Error loading items for category", categoryId, ":", error);
                 document.getElementById("content").innerHTML = `
                     <div class="error-message">
                         <p>${translations[currentLang].error}: ${error.message}</p>
@@ -278,7 +278,6 @@
 
         function renderItems(items) {
             const container = document.getElementById("content");
-            console.log("Rendering items:", items);
             container.innerHTML = "";
             if (!items || items.length === 0) {
                 container.innerHTML = `
@@ -296,7 +295,6 @@
                 card.onclick = () => {
                     if (isProcessing) return;
                     isProcessing = true;
-                    console.log("Clicked item:", item);
                     if (item.isCategory) {
                         loadItems(item.id).finally(() => isProcessing = false);
                     } else {
@@ -330,7 +328,6 @@
         }
 
         async function getTicket(serviceId, serviceName) {
-            console.log("Getting ticket for service:", serviceId, serviceName);
             try {
                 const response = await fetch(`${serverUrl}/get_ticket`, {
                     method: "POST",
@@ -338,20 +335,23 @@
                     body: JSON.stringify({ service_id: serviceId, lang: currentLang, kiosk_id: kioskId })
                 });
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP error! Status: ${response.status}, Response: ${errorText}`);
+                    let msg = translations[currentLang].error;
+                    try {
+                        const errData = await response.json();
+                        msg = errData.error || msg;
+                    } catch {}
+                    throw new Error(msg);
                 }
                 const data = await response.json();
-                console.log("Ticket received:", data);
-                lastTicket = { ...data, serviceName };
-                showTicket(data.ticket, serviceName, data.wait_time, data.ticket_id, data.qr_url);
+                lastTicket = data;
+                showTicket(data.ticket, serviceName, data.wait_time, data.ticket_id, data.status_url);
+                printTicket(data.ticket, serviceName, data.wait_time, data.ticket_id, data.qr_data);
             } catch (error) {
-                console.error("Error getting ticket:", error);
-                showNotification(`${translations[currentLang].error}: ${error.message}`);
+                showTicket(`${translations[currentLang].error}: ${error.message}`);
             }
         }
 
-        function showTicket(ticket, serviceName, waitTime, ticketId, qrUrl) {
+        function showTicket(ticket, serviceName, waitTime, ticketId, statusUrl) {
             document.getElementById("content").style.display = "none";
             document.getElementById("pagination").style.display = "none";
             document.getElementById("backButton").style.display = "none";
@@ -361,8 +361,79 @@
             document.getElementById("ticketService").innerText = `${translations[currentLang].service}: ${serviceName}`;
             document.getElementById("ticketWaitTime").innerText = `${translations[currentLang].wait}: ${waitTime} min`;
             document.getElementById("ticketDateTime").innerText = `${translations[currentLang].dateTime}: ${new Date().toLocaleString()}`;
-            document.getElementById("ticketQR").src = qrUrl;
+            // Новое: показываем оператора
+            let operatorInfo = "";
+            if (lastTicket && (lastTicket.operator_name || lastTicket.operator_number)) {
+                operatorInfo = "Operator: ";
+                if (lastTicket.operator_name) operatorInfo += lastTicket.operator_name;
+                if (lastTicket.operator_number) operatorInfo += ` (${lastTicket.operator_number})`;
+            }
+            // Если блока нет, добавляем его
+            let operatorElem = document.getElementById("ticketOperator");
+            if (!operatorElem) {
+                operatorElem = document.createElement("p");
+                operatorElem.id = "ticketOperator";
+                document.getElementById("ticketService").after(operatorElem);
+            }
+            operatorElem.innerText = operatorInfo;
+            if (lastTicket && lastTicket.qr_data)
+                document.getElementById("ticketQR").src = `data:image/png;base64,${lastTicket.qr_data}`;
+            else
+                document.getElementById("ticketQR").src = "";
             document.querySelector(".return-btn").innerText = translations[currentLang].return;
+            document.querySelector(".status-btn").innerText = translations[currentLang].status;
+            showNotification(translations[currentLang].printing);
+        }
+
+        function printTicket(ticket, serviceName, waitTime, ticketId, qrData) {
+            // Получаем данные об операторе
+            let operatorInfo = "";
+            if (lastTicket && (lastTicket.operator_name || lastTicket.operator_number)) {
+                operatorInfo = "Operator: ";
+                if (lastTicket.operator_name) operatorInfo += lastTicket.operator_name;
+                if (lastTicket.operator_number) operatorInfo += ` (${lastTicket.operator_number})`;
+            }
+            const printContent = `
+                <html>
+                <head>
+                    <title>Reg print</title>
+                    <style>
+                        @page { size: 60mm 60mm; margin: 0; }
+                        body { margin: 2mm; font-family: Arial, sans-serif; text-align: center; font-size: 10px; }
+                        img { width: 30mm; height: 30mm; margin: 2mm auto; }
+                        p { margin: 1mm 0; }
+                        .line { border-top: 1px dashed #000; margin: 2mm 0; }
+                    </style>
+                </head>
+                <body>
+                    <p>Talon: ${ticket}</p>
+                    <p>Xizmat: ${serviceName}</p>
+                    <p>${operatorInfo}</p>
+                    <p>Kutish: ${waitTime} min</p>
+                    <div class="line"></div>
+                    <p>${new Date().toLocaleString()}</p>
+                    <img src="data:image/png;base64,${qrData}" alt="QR Code">
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            setTimeout(function() { window.close(); }, 500);
+                        }
+                    <\/script>
+                </body>
+                </html>
+            `;
+            const printWindow = window.open('', '_blank', 'width=400,height=400');
+            printWindow.document.open();
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+        }
+
+        function viewStatus() {
+            if (lastTicket && lastTicket.status_url) {
+                window.open(lastTicket.status_url, "_blank");
+            } else {
+                showNotification(translations[currentLang].error);
+            }
         }
 
         function showNotification(message) {
@@ -372,16 +443,19 @@
             notification.className = "notification";
             notification.innerText = message;
             document.body.appendChild(notification);
-            setTimeout(() => notification.remove(), 10000);
+            setTimeout(() => notification.remove(), 5000);
         }
 
         function goBack() {
-            if (categoryStack.length <= 1) {
+            if (categoryStack.length <= 0) {
                 categoryStack = [];
                 loadCategories();
             } else {
                 categoryStack.pop();
-                loadItems(categoryStack[categoryStack.length - 1], 1);
+                if (categoryStack.length > 0)
+                    loadItems(categoryStack[categoryStack.length - 1], 1);
+                else
+                    loadCategories();
             }
         }
 
@@ -404,6 +478,7 @@
             document.getElementById("backButton").innerText = translations[lang].back;
             document.getElementById("ticketTitle").innerText = translations[lang].ticket;
             document.querySelector(".return-btn").innerText = translations[lang].return;
+            document.querySelector(".status-btn").innerText = translations[lang].status;
             if (categoryStack.length > 0) loadItems(categoryStack[categoryStack.length - 1], currentPage);
             else loadCategories();
         }

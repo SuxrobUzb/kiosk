@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Operator Evaluation</title>
+    <title>File a Dispute</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
@@ -22,6 +22,7 @@
             --card-bg: #ffffff;
             --primary: #1a73e8;
             --secondary: #34c759;
+            --danger: #e53e3e;
         }
         body.dark {
             --bg: #1a202c;
@@ -29,6 +30,7 @@
             --card-bg: #2d3748;
             --primary: #63b3ed;
             --secondary: #68d391;
+            --danger: #f56565;
         }
         .container {
             background: var(--card-bg);
@@ -52,24 +54,24 @@
             margin-bottom: 8px; 
             color: var(--text); 
         }
-        input, textarea {
+        textarea {
             width: 100%;
             padding: 12px;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
             font-size: 16px;
+            resize: vertical;
             background: var(--card-bg);
             color: var(--text);
         }
-        .dark input, .dark textarea { 
+        .dark textarea { 
             border-color: #4a5568; 
             background: #2d3748; 
         }
-        textarea { resize: vertical; }
         button {
             width: 100%;
             padding: 12px;
-            background: var(--secondary);
+            background: var(--danger);
             border: none;
             border-radius: 8px;
             font-size: 16px;
@@ -78,7 +80,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        button:hover { background: #2fb34e; }
+        button:hover { background: #c53030; }
         .controls {
             position: fixed;
             top: 20px;
@@ -109,24 +111,10 @@
             color: #ffffff; 
             border-color: var(--primary); 
         }
-        .notification {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--secondary);
-            color: #ffffff;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 16px;
-            z-index: 1000;
-            transition: opacity 0.3s;
-            text-align: center;
-        }
         @media (max-width: 480px) {
             .container { padding: 16px; }
             h1 { font-size: 20px; }
-            input, textarea, button { font-size: 14px; }
+            textarea, button { font-size: 14px; }
             .controls { 
                 top: 10px; 
                 right: 10px; 
@@ -148,16 +136,11 @@
         <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
     </div>
     <div class="container">
-        <h1 id="title">Operatorni baholash</h1>
-        <form id="feedbackForm" action="{{ server_url }}/submit_feedback" method="POST">
-            <input type="hidden" name="ticket_id" id="ticketId" value="">
+        <h1 id="title">Shikoyat yuborish</h1>
+        <form action="{{ server_url }}/dispute/{{ ticket_number }}" method="POST">
             <div class="form-group">
-                <label for="rating" id="labelRating">Baholash (1-5)</label>
-                <input type="number" id="rating" name="rating" min="1" max="5" required>
-            </div>
-            <div class="form-group">
-                <label for="comment" id="labelComment">Izoh (ixtiyoriy)</label>
-                <textarea id="comment" name="comment" rows="4"></textarea>
+                <label for="comment" id="labelComment">Shikoyat matni</label>
+                <textarea id="comment" name="comment" rows="6" required></textarea>
             </div>
             <button type="submit" id="submitBtn">Yuborish</button>
         </form>
@@ -165,52 +148,33 @@
     <script>
         const translations = {
             uz_lat: {
-                title: "Operatorni baholash",
-                rating: "Baholash (1-5)",
-                comment: "Izoh (ixtiyoriy)",
-                submit: "Yuborish",
-                success: "Fikringiz yuborildi!",
-                error: "Xatolik yuz berdi"
+                title: "Shikoyat yuborish",
+                comment: "Shikoyat matni",
+                submit: "Yuborish"
             },
             uz_cyr: {
-                title: "Операторни баҳолаш",
-                rating: "Баҳолаш (1-5)",
-                comment: "Изоҳ (ихтиёрий)",
-                submit: "Юбориш",
-                success: "Фикрингиз юборилди!",
-                error: "Хатолик юз берди"
+                title: "Шикоят юбориш",
+                comment: "Шикоят матни",
+                submit: "Юбориш"
             },
             ru: {
-                title: "Оценить оператора",
-                rating: "Оценка (1-5)",
-                comment: "Комментарий (необязательно)",
-                submit: "Отправить",
-                success: "Ваш отзыв отправлен!",
-                error: "Произошла ошибка"
+                title: "Подать жалобу",
+                comment: "Текст жалобы",
+                submit: "Отправить"
             },
             en: {
-                title: "Evaluate Operator",
-                rating: "Rating (1-5)",
-                comment: "Comment (optional)",
-                submit: "Submit",
-                success: "Your feedback has been submitted!",
-                error: "An error occurred"
+                title: "File a Dispute",
+                comment: "Dispute Details",
+                submit: "Submit"
             }
         };
         let currentLang = 'uz_lat';
-        const serverUrl = '{{ server_url }}';
-
-        // Get ticket_id from URL or session
-        const urlParams = new URLSearchParams(window.location.search);
-        const ticketId = urlParams.get('ticket_id') || localStorage.getItem('ticket_id') || '';
-        document.getElementById('ticketId').value = ticketId;
 
         function setLanguage(lang) {
             currentLang = lang;
             document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelector(`button[onclick="setLanguage('${lang}')"]`).classList.add('active');
             document.getElementById('title').innerText = translations[lang].title;
-            document.getElementById('labelRating').innerText = translations[lang].rating;
             document.getElementById('labelComment').innerText = translations[lang].comment;
             document.getElementById('submitBtn').innerText = translations[lang].submit;
         }
@@ -222,59 +186,9 @@
             document.querySelector('.theme-toggle').innerText = isDark ? '☀️' : '🌙';
         }
 
-        function showNotification(message) {
-            const existing = document.querySelector('.notification');
-            if (existing) existing.remove();
-            const notification = document.createElement('div');
-            notification.className = 'notification';
-            notification.innerText = message;
-            document.body.appendChild(notification);
-            setTimeout(() => notification.remove(), 5000);
-        }
-
-        // Handle form submission
-        document.getElementById('feedbackForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            try {
-                const response = await fetch(`${serverUrl}/submit_feedback`, {
-                    method: 'POST',
-                    body: formData
-                });
-                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-                showNotification(translations[currentLang].success);
-                // Redirect to ticket status page
-                const ticketNumber = await getTicketNumber(formData.get('ticket_id'));
-                if (ticketNumber) {
-                    window.location.href = `${serverUrl}/ticket/${ticketNumber}`;
-                } else {
-                    window.location.href = `${serverUrl}/`;
-                }
-            } catch (error) {
-                console.error('Error submitting feedback:', error);
-                showNotification(`${translations[currentLang].error}: ${error.message}`);
-            }
-        });
-
-        async function getTicketNumber(ticketId) {
-            try {
-                const response = await fetch(`${serverUrl}/ticket_status/${ticketId}`);
-                if (!response.ok) return null;
-                const data = await response.json();
-                return data.ticket_number;
-            } catch {
-                return null;
-            }
-        }
-
         if (localStorage.getItem('theme') === 'dark') {
             document.body.classList.add('dark');
             document.querySelector('.theme-toggle').innerText = '☀️';
-        }
-
-        if (!ticketId) {
-            showNotification(translations[currentLang].error);
-            setTimeout(() => window.location.href = `${serverUrl}/`, 3000);
         }
     </script>
 </body>
