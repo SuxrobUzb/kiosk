@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Панель статистики</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div class="lang-switcher">
+                <button @click="changeLang('uz_lat')">Uz (Lat)</button>
+                <button @click="changeLang('uz_cyr')">Ўз (Кирилл)</button>
+                <button @click="changeLang('ru')">Ру</button>
+                <button @click="changeLang('en')">En</button>
+                <button @click="toggleTheme">🌙</button>
+                <a href="/admin_logout">Выход</a>
+            </div>
+        </header>
+        <main>
+            <h1>Панель статистики</h1>
+            <nav>
+                <ul>
+                    <li><a href="/admin">Админ-панель</a></li>
+                    <li><a href="/admin/statistics">Статистика</a></li>
+                </ul>
+            </nav>
+            <div class="section">
+                <h2>Фильтры</h2>
+                <form id="stats-filter">
+                    <label>Тип представления:
+                        <select v-model="viewType">
+                            <option value="service">По услугам</option>
+                            <option value="operator_overall">По операторам (общее)</option>
+                            <option value="operator_individual">По оператору (индивидуально)</option>
+                        </select>
+                    </label>
+                    <label>Услуга:
+                        <select v-model="serviceId">
+                            <option value="">Все услуги</option>
+                            <option v-for="service in services" :value="service[0]">{{ service[1] }}</option>
+                        </select>
+                    </label>
+                    <label>Оператор:
+                        <select v-model="operatorId" :disabled="viewType !== 'operator_individual'">
+                            <option value="">Все операторы</option>
+                            <option v-for="operator in operators" :value="operator[0]">{{ operator[1] }}</option>
+                        </select>
+                    </label>
+                    <label>Временной фильтр:
+                        <select v-model="timeFilter">
+                            <option value="daily">Ежедневно</option>
+                            <option value="monthly">Ежемесячно</option>
+                            <option value="half_yearly">Полугодично</option>
+                            <option value="yearly">Ежегодно</option>
+                            <option value="custom">Пользовательский</option>
+                        </select>
+                    </label>
+                    <label v-if="timeFilter === 'custom'">Начальная дата:
+                        <input type="date" v-model="startDate">
+                    </label>
+                    <label v-if="timeFilter === 'custom'">Конечная дата:
+                        <input type="date" v-model="endDate">
+                    </label>
+                    <button type="button" @click="fetchData">Применить</button>
+                    <button type="button" @click="exportData">Экспорт в Excel</button>
+                </form>
+            </div>
+            <div class="section">
+                <h2>Результаты</h2>
+                <div v-if="chartData.length">
+                    <canvas id="statsChart"></canvas>
+                </div>
+                <table v-if="tableData.length">
+                    <tr>
+                        <th>Номер талона</th>
+                        <th>Услуга</th>
+                        <th>Категория</th>
+                        <th>Оператор</th>
+                        <th>Номер оператора</th>
+                        <th>Статус</th>
+                        <th>Создано</th>
+                        <th>Завершено</th>
+                        <th>Время обслуживания (мин)</th>
+                    </tr>
+                    <tr v-for="row in tableData">
+                        <td>{{ row['Ticket Number'] }}</td>
+                        <td>{{ row['Service Name'] }}</td>
+                        <td>{{ row['Category Name'] }}</td>
+                        <td>{{ row['Operator Name'] }}</td>
+                        <td>{{ row['Operator Number'] }}</td>
+                        <td>{{ row['Status'] }}</td>
+                        <td>{{ row['Created At'] }}</td>
+                        <td>{{ row['Finished At'] }}</td>
+                        <td>{{ row['Service Time'] ? row['Service Time'].toFixed(2) : 'N/A' }}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="section">
+                <h2>Аналитика и рекомендации</h2>
+                <h3>Проблемные услуги</h3>
+                <ul>
+                    <li v-for="service in problemServices">
+                        {{ service.name }}: Среднее время {{ service.avg_service_time.toFixed(2) }} мин, Споры: {{ service.dispute_count }}
+                    </li>
+                </ul>
+                <h3>Проблемные операторы</h3>
+                <ul>
+                    <li v-for="operator in problemOperators">
+                        {{ operator.name }}: Средний рейтинг {{ operator.avg_rating ? operator.avg_rating.toFixed(2) : 'N/A' }}, Споры: {{ operator.dispute_count }}
+                    </li>
+                </ul>
+                <h3>Рекомендации</h3>
+                <ul>
+                    <li v-for="rec in recommendations">
+                        {{ rec.message }}
+                    </li>
+                </ul>
+            </div>
+        </main>
+    </div>
+    <script>
+    new Vue({
+        el: '#app',
+        data: {
+            currentLang: 'uz_lat',
+            services: {{ services | tojson }},
+            operators: {{ operators | tojson }},
+            viewType: 'service',
+            serviceId: '',
+            operatorId: '',
+            timeFilter: 'daily',
+            startDate: '',
+            endDate: '',
+            tableData: [],
+            chartData: [],
+            problemServices: [],
+            problemOperators: [],
+            recommendations: [],
+            chart: null
+        },
+        methods: {
+            changeLang(lang) {
+                this.currentLang = lang;
+                // Добавить логику переключения языка
+            },
+            toggleTheme() {
+                document.body.classList.toggle('dark-theme');
+            },
+            fetchData() {
+                if (this.viewType === 'operator_individual' && (!this.operatorId || !this.serviceId)) {
+                    alert('Выберите оператора и услугу для индивидуальной статистики');
+                    return;
+                }
+                const params = new URLSearchParams({
+                    view_type: this.viewType,
+                    time_filter: this.timeFilter,
+                    ...(this.serviceId && { service_id: this.serviceId }),
+                    ...(this.operatorId && { operator_id: this.operatorId }),
+                    ...(this.timeFilter === 'custom' && { start_date: this.startDate, end_date: this.endDate })
+                });
+                axios.get(`/api/admin/statistics/data?${params}`)
+                    .then(response => {
+                        this.tableData = response.data.table_data;
+                        this.chartData = response.data.chart_data;
+                        this.updateChart();
+                    });
+                axios.get('/api/admin/recommendations')
+                    .then(response => {
+                        this.problemServices = response.data.problem_services;
+                        this.problemOperators = response.data.problem_operators;
+                        this.recommendations = response.data.recommendations;
+                    });
+            },
+            updateChart() {
+                const ctx = document.getElementById('statsChart').getContext('2d');
+                if (this.chart) this.chart.destroy();
+                this.chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: this.chartData.map(item => item.time_period),
+                        datasets: [
+                            {
+                                label: 'Количество талонов',
+                                data: this.chartData.map(item => item.ticket_count),
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'Среднее время обслуживания (мин)',
+                                data: this.chartData.map(item => item.avg_service_time ? item.avg_service_time.toFixed(2) : 0),
+                                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            y: { beginAtZero: true }
+                        },
+                        plugins: {
+                            legend: { display: true }
+                        }
+                    }
+                });
+            },
+            exportData() {
+                const params = new URLSearchParams({
+                    view_type: this.viewType,
+                    time_filter: this.timeFilter,
+                    ...(this.serviceId && { service_id: this.serviceId }),
+                    ...(this.operatorId && { operator_id: this.operatorId }),
+                    ...(this.timeFilter === 'custom' && { start_date: this.startDate, end_date: this.endDate })
+                });
+                window.location.href = `/api/admin/statistics/export?${params}`;
+            }
+        },
+        mounted() {
+            this.fetchData();
+        }
+    });
+    </script>
+</body>
+</html>
