@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление категориями</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f4f7fa;
+            --text: #2d3748;
+            --card-bg: #ffffff;
+            --primary: #1a73e8;
+            --secondary: #34c759;
+            --danger: #e53e3e;
+            --border-color: #e2e8f0;
+        }
+        body.dark {
+            --bg: #1a202c;
+            --text: #e2e8f0;
+            --card-bg: #2d3748;
+            --primary: #63b3ed;
+            --secondary: #68d391;
+            --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .container {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            transition: background-color 0.3s ease;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary);
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: var(--danger);
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: var(--secondary);
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: var(--bg);
+        }
+        .dark tr:nth-child(even) {
+            background-color: #2d3748;
+        }
+        tr:hover {
+            background-color: #f0f4f8;
+        }
+        .dark tr:hover {
+            background-color: #4a5568;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .action-buttons .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        input[type="text"], select {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            background-color: var(--card-bg);
+            color: var(--text);
+            width: 100%;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding: 20px;
+            }
+            .container {
+                padding: 1rem;
+            }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .header nav {
+                margin-top: 10px;
+            }
+            .controls {
+                flex-direction: column;
+                align-items: flex-end;
+                top: 10px;
+                right: 10px;
+            }
+            .controls .lang-btn, .controls .theme-toggle {
+                width: auto;
+                margin-bottom: 5px;
+            }
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead tr {
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }
+            tr { border: 1px solid var(--border-color); margin-bottom: 0.625rem; }
+            td {
+                border: none;
+                border-bottom: 1px solid var(--border-color);
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            td:before {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+            }
+            td:nth-of-type(1):before { content: attr(data-label); }
+            td:nth-of-type(2):before { content: attr(data-label); }
+            .action-buttons {
+                justify-content: flex-end;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="absolute top-4 right-4 flex space-x-2 controls">
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
+        <div id="language-buttons" class="flex space-x-2">
+        </div>
+    </div>
+    <div class="container">
+        <header class="flex justify-between items-center mb-6 flex-wrap">
+            <h1 id="pageTitle" class="text-3xl font-bold mb-2 md:mb-0">Управление категориями</h1>
+            <nav class="flex space-x-4">
+                <a href="/admin" id="backToAdminButton" class="btn btn-secondary">Назад в админ-панель</a>
+                <a href="/admin_logout" id="logoutButton" class="btn btn-danger">Выход</a>
+            </nav>
+        </header>
+        <div class="mb-6">
+            <h2 id="addCategoryTitle" class="text-2xl font-semibold mb-4">Добавить новую категорию</h2>
+            <div class="flex flex-col md:flex-row gap-4">
+                <input type="text" id="categoryName" placeholder="Название категории" class="flex-grow">
+                <button id="addCategoryButton" class="btn btn-primary">Добавить</button>
+            </div>
+        </div>
+        <div>
+            <h2 id="categoryListTitle" class="text-2xl font-semibold mb-4">Список категорий</h2>
+            <table class="min-w-full">
+                <thead>
+                    <tr>
+                        <th id="categoryNameHeader">Название</th>
+                        <th id="categoryActionsHeader">Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="categoryTableBody">
+                </tbody>
+            </table>
+        </div>
+        <!-- Блок для подкатегорий -->
+        <div class="mt-10">
+            <h2 id="addSubcategoryTitle" class="text-2xl font-semibold mb-4">Добавить новую подкатегорию</h2>
+            <div class="flex flex-col md:flex-row gap-4">
+                <select id="subcategoryCategorySelect" class="flex-grow"></select>
+                <input type="text" id="subcategoryName" placeholder="Название подкатегории" class="flex-grow">
+                <button id="addSubcategoryButton" class="btn btn-primary">Добавить</button>
+            </div>
+        </div>
+        <div class="mt-6">
+            <h2 id="subcategoryListTitle" class="text-2xl font-semibold mb-4">Список подкатегорий</h2>
+            <table class="min-w-full">
+                <thead>
+                    <tr>
+                        <th id="subcategoryNameHeader">Название</th>
+                        <th id="subcategoryCategoryHeader">Категория</th>
+                        <th id="subcategoryActionsHeader">Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="subcategoryTableBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const SERVER_URL = "{{ SERVER_URL }}";
+        let currentLang = localStorage.getItem('language') || 'uz_lat';
+        let translations = {};
+        let categoriesCache = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    loadCategories();
+                    loadSubcategories();
+                });
+            });
+            setupThemeToggle();
+            setupAddCategory();
+            setupAddSubcategory();
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = '';
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error loading languages:", error);
+                showNotification(`${translations.error_fetch || 'Error loading languages:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+                showNotification(`${translations.error_fetch || 'Error loading translations:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            document.title = translations.category_management || 'Управление категориями';
+            document.getElementById("pageTitle").innerText = translations.category_management || 'Управление категориями';
+            document.getElementById("backToAdminButton").innerText = translations.back_to_admin_panel || 'Назад в админ-панель';
+            document.getElementById("logoutButton").innerText = translations.logout_button || 'Выход';
+            document.getElementById("addCategoryTitle").innerText = translations.add_new_category || 'Добавить новую категорию';
+            document.getElementById("categoryName").placeholder = translations.category_name_placeholder || 'Название категории';
+            document.getElementById("addCategoryButton").innerText = translations.add_button || 'Добавить';
+            document.getElementById("categoryListTitle").innerText = translations.category_list_title || 'Список категорий';
+            document.getElementById("categoryNameHeader").innerText = translations.table_name || 'Название';
+            document.getElementById("categoryActionsHeader").innerText = translations.table_actions || 'Действия';
+            document.getElementById("addSubcategoryTitle").innerText = translations.add_new_subcategory || 'Добавить новую подкатегорию';
+            document.getElementById("subcategoryName").placeholder = translations.subcategory_name_placeholder || 'Название подкатегории';
+            document.getElementById("addSubcategoryButton").innerText = translations.add_button || 'Добавить';
+            document.getElementById("subcategoryListTitle").innerText = translations.subcategory_list_title || 'Список подкатегорий';
+            document.getElementById("subcategoryNameHeader").innerText = translations.table_name || 'Название';
+            document.getElementById("subcategoryCategoryHeader").innerText = translations.table_category || 'Категория';
+            document.getElementById("subcategoryActionsHeader").innerText = translations.table_actions || 'Действия';
+            loadCategories();
+            loadSubcategories();
+        }
+
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0;
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes);
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+            applyTheme(themes[currentThemeIndex]);
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/categories`);
+                if (!response.ok) throw new Error("Failed to fetch categories");
+                const categories = await response.json();
+                categoriesCache = categories;
+                const tableBody = document.getElementById('categoryTableBody');
+                tableBody.innerHTML = '';
+                categories.forEach(category => {
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td data-label="${translations.table_name || 'Название'}">${category.name}</td>
+                        <td data-label="${translations.table_actions || 'Действия'}" class="action-buttons">
+                            <button class="btn btn-primary edit-btn" data-id="${category.id}" data-name="${category.name}">${translations.edit_button || 'Редактировать'}</button>
+                            <button class="btn btn-danger delete-btn" data-id="${category.id}">${translations.delete_button || 'Удалить'}</button>
+                        </td>
+                    `;
+                });
+                attachCategoryEventListeners();
+                fillCategorySelect();
+            } catch (error) {
+                console.error("Error loading categories:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки категорий:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function attachCategoryEventListeners() {
+            document.querySelectorAll('.edit-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const id = event.target.dataset.id;
+                    const name = event.target.dataset.name;
+                    editCategory(id, name);
+                };
+            });
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const id = event.target.dataset.id;
+                    deleteCategory(id);
+                };
+            });
+        }
+
+        function setupAddCategory() {
+            document.getElementById('addCategoryButton').addEventListener('click', addCategory);
+            document.getElementById('categoryName').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addCategory();
+                }
+            });
+        }
+
+        async function addCategory() {
+            const categoryNameInput = document.getElementById('categoryName');
+            const name = categoryNameInput.value.trim();
+            if (!name) {
+                showNotification(translations.empty_category_name || 'Название категории не может быть пустым.', 'danger');
+                return;
+            }
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/categories`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.message || translations.category_added_success || 'Категория успешно добавлена.', 'info');
+                    categoryNameInput.value = '';
+                    loadCategories();
+                    loadSubcategories();
+                } else {
+                    showNotification(data.error || translations.error_adding_category || 'Ошибка добавления категории.', 'danger');
+                }
+            } catch (error) {
+                console.error("Error adding category:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function editCategory(id, currentName) {
+            const newName = prompt(`${translations.enter_new_category_name || 'Введите новое название для категории:'} ${currentName}`);
+            if (newName === null || newName.trim() === '') {
+                if (newName !== null) showNotification(translations.empty_category_name || 'Название категории не может быть пустым.', 'danger');
+                return;
+            }
+            fetch(`${SERVER_URL}/api/admin/categories/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName.trim() })
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    showNotification(body.message || translations.category_updated_success || 'Категория успешно обновлена.', 'info');
+                    loadCategories();
+                    loadSubcategories();
+                } else {
+                    showNotification(body.error || translations.error_updating_category || 'Ошибка обновления категории.', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error("Error updating category:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            });
+        }
+
+        function deleteCategory(id) {
+            if (!confirm(translations.confirm_delete_category || 'Вы уверены, что хотите удалить эту категорию?')) {
+                return;
+            }
+            fetch(`${SERVER_URL}/api/admin/categories/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    showNotification(body.message || translations.category_deleted_success || 'Категория успешно удалена.', 'info');
+                    loadCategories();
+                    loadSubcategories();
+                } else {
+                    showNotification(body.error || translations.error_deleting_category || 'Ошибка удаления категории.', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error("Error deleting category:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            });
+        }
+
+        // ---- Подкатегории ----
+
+        function setupAddSubcategory() {
+            document.getElementById('addSubcategoryButton').addEventListener('click', addSubcategory);
+            document.getElementById('subcategoryName').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addSubcategory();
+                }
+            });
+        }
+
+        function fillCategorySelect() {
+            const select = document.getElementById('subcategoryCategorySelect');
+            select.innerHTML = '';
+            categoriesCache.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.innerText = cat.name;
+                select.appendChild(option);
+            });
+        }
+
+        async function loadSubcategories() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/subcategories`);
+                if (!response.ok) throw new Error("Failed to fetch subcategories");
+                const subcategories = await response.json();
+                const tableBody = document.getElementById('subcategoryTableBody');
+                tableBody.innerHTML = '';
+                subcategories.forEach(subcat => {
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td data-label="${translations.table_name || 'Название'}">${subcat.name}</td>
+                        <td data-label="${translations.table_category || 'Категория'}">${subcat.category_name || getCategoryName(subcat.category_id)}</td>
+                        <td data-label="${translations.table_actions || 'Действия'}" class="action-buttons">
+                            <button class="btn btn-primary edit-sub-btn" data-id="${subcat.id}" data-name="${subcat.name}" data-category="${subcat.category_id}">${translations.edit_button || 'Редактировать'}</button>
+                            <button class="btn btn-danger delete-sub-btn" data-id="${subcat.id}">${translations.delete_button || 'Удалить'}</button>
+                        </td>
+                    `;
+                });
+                attachSubcategoryEventListeners();
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки подкатегорий:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function getCategoryName(categoryId) {
+            const cat = categoriesCache.find(c => c.id == categoryId);
+            return cat ? cat.name : '';
+        }
+
+        function attachSubcategoryEventListeners() {
+            document.querySelectorAll('.edit-sub-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const id = event.target.dataset.id;
+                    const name = event.target.dataset.name;
+                    const categoryId = event.target.dataset.category;
+                    editSubcategory(id, name, categoryId);
+                };
+            });
+            document.querySelectorAll('.delete-sub-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const id = event.target.dataset.id;
+                    deleteSubcategory(id);
+                };
+            });
+        }
+
+        async function addSubcategory() {
+            const name = document.getElementById('subcategoryName').value.trim();
+            const categoryId = document.getElementById('subcategoryCategorySelect').value;
+            if (!name) {
+                showNotification(translations.empty_subcategory_name || 'Название подкатегории не может быть пустым.', 'danger');
+                return;
+            }
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/subcategories`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, category_id: categoryId })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.message || translations.subcategory_added_success || 'Подкатегория успешно добавлена.', 'info');
+                    document.getElementById('subcategoryName').value = '';
+                    loadSubcategories();
+                } else {
+                    showNotification(data.error || translations.error_adding_subcategory || 'Ошибка добавления подкатегории.', 'danger');
+                }
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function editSubcategory(id, currentName, currentCategoryId) {
+            const newName = prompt(`${translations.enter_new_subcategory_name || 'Введите новое название для подкатегории:'} ${currentName}`, currentName);
+            if (newName === null || newName.trim() === '') {
+                if (newName !== null) showNotification(translations.empty_subcategory_name || 'Название подкатегории не может быть пустым.', 'danger');
+                return;
+            }
+            // Выбор новой категории
+            let categoryOptions = categoriesCache.map(cat => `${cat.id}: ${cat.name}`).join('\n');
+            let newCategoryId = prompt(`${translations.enter_new_category_id || 'Введите ID категории для подкатегории:'}\n${categoryOptions}`, currentCategoryId);
+            if (newCategoryId === null || newCategoryId.trim() === '') {
+                if (newCategoryId !== null) showNotification(translations.empty_category_id || 'ID категории не может быть пустым.', 'danger');
+                return;
+            }
+            fetch(`${SERVER_URL}/api/admin/subcategories/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName.trim(), category_id: newCategoryId })
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    showNotification(body.message || translations.subcategory_updated_success || 'Подкатегория успешно обновлена.', 'info');
+                    loadSubcategories();
+                } else {
+                    showNotification(body.error || translations.error_updating_subcategory || 'Ошибка обновления подкатегории.', 'danger');
+                }
+            })
+            .catch(error => {
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            });
+        }
+
+        function deleteSubcategory(id) {
+            if (!confirm(translations.confirm_delete_subcategory || 'Вы уверены, что хотите удалить эту подкатегорию?')) {
+                return;
+            }
+            fetch(`${SERVER_URL}/api/admin/subcategories/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    showNotification(body.message || translations.subcategory_deleted_success || 'Подкатегория успешно удалена.', 'info');
+                    loadSubcategories();
+                } else {
+                    showNotification(body.error || translations.error_deleting_subcategory || 'Ошибка удаления подкатегории.', 'danger');
+                }
+            })
+            .catch(error => {
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            });
+        }
+
+        // Initial theme setup (from localStorage)
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("dark");
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
+        }
+    </script>
+</body>
+</html>

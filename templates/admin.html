@@ -1,16 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin paneli</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #f4f7fa;
-            color: #2d3748;
-            padding: 40px;
-        }
+        /* Custom CSS for theme variables and basic styles */
         :root {
             --bg: #f4f7fa;
             --text: #2d3748;
@@ -18,6 +16,7 @@
             --primary: #1a73e8;
             --secondary: #34c759;
             --danger: #e53e3e;
+            --border-color: #e2e8f0;
         }
         body.dark {
             --bg: #1a202c;
@@ -26,634 +25,477 @@
             --primary: #63b3ed;
             --secondary: #68d391;
             --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f8ff; /* Light blue */
+            --text: #36454F; /* Charcoal */
+            --card-bg: #ffffff;
+            --primary: #007bff; /* Bright blue */
+            --secondary: #28a745; /* Green */
+            --danger: #dc3545; /* Red */
+            --border-color: #ced4da;
         }
         body {
+            font-family: 'Inter', sans-serif;
             background: var(--bg);
             color: var(--text);
+            transition: background 0.3s ease, color 0.3s ease;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
-        h1 { text-align: center; font-size: 32px; font-weight: 600; color: var(--primary); margin-bottom: 40px; }
-        .section { background: var(--card-bg); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
-        h2 { font-size: 20px; font-weight: 600; color: var(--primary); margin-bottom: 16px; }
-        form { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
-        label { font-size: 14px; color: var(--text); }
-        input, select {
-            padding: 12px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 16px;
-            flex: 1;
-            outline: none;
-            background: #ffffff;
+        .container {
+            background: var(--card-bg);
+            border-radius: 0.75rem; /* Tailwind rounded-xl */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Tailwind shadow-md */
+            padding: 1.5rem; /* Tailwind p-6 */
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary); /* Darker shade or slight variation */
+            opacity: 0.9;
+        }
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease;
+        }
+        .btn-danger:hover {
+            background-color: var(--danger);
+            opacity: 0.9;
+        }
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.2s ease;
+        }
+        .btn-secondary:hover {
+            background-color: var(--secondary);
+            opacity: 0.9;
+        }
+        .input-field {
+            border: 1px solid var(--border-color);
+            background-color: var(--bg);
             color: var(--text);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            transition: border-color 0.2s ease, background-color 0.2s ease;
         }
-        .dark input, .dark select { background: #4a5568; border-color: #718096; }
-        input:focus, select:focus { border-color: var(--primary); }
-        button {
-            padding: 12px 24px;
-            border: none;
+        .input-field:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50; /* Green */
+            color: white;
+            padding: 15px;
             border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            color: #ffffff;
-            cursor: pointer;
-            transition: all 0.2s;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
         }
-        .add-btn { background: var(--secondary); }
-        .add-btn:hover { background: #2fb34e; }
-        .edit-btn { background: var(--primary); }
-        .edit-btn:hover { background: #1666c5; }
-        .delete-btn { background: var(--danger); }
-        .delete-btn:hover { background: #c53030; }
-        .assign-btn { background: #ed8936; }
-        .assign-btn:hover { background: #dd6b20; }
-        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; }
-        th, td { padding: 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-        .dark th, .dark td { border-bottom: 1px solid #4a5568; }
-        th { background: var(--primary); color: #ffffff; font-weight: 600; }
-        tr:last-child td { border-bottom: none; }
-        tr:hover { background: #f7fafc; }
-        .dark tr:hover { background: #4a5568; }
-        .controls { text-align: center; margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
-        .lang-btn, .theme-toggle {
-            padding: 6px 12px;
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 12px;
-            color: #4a5568;
-            cursor: pointer;
-            transition: all 0.2s;
+        .notification.danger {
+            background-color: var(--danger);
         }
-        .dark .lang-btn, .dark .theme-toggle { background: #2d3748; border-color: #4a5568; color: #e2e8f0; }
-        .lang-btn:hover, .theme-toggle:hover { background: #eef4fd; }
-        .dark .lang-btn:hover, .dark .theme-toggle:hover { background: #4a5568; }
-        .lang-btn.active { background: var(--primary); color: #ffffff; border-color: var(--primary); }
-        .stats { margin-top: 20px; font-size: 16px; }
-        .service-assign { margin-top: 10px; display: flex; gap: 12px; }
+        .notification.info {
+            background-color: var(--primary);
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 </head>
-<body>
-    <div class="controls">
-        <button class="lang-btn active" onclick="setLanguage('uz_lat')">Uz (Lat)</button>
-        <button class="lang-btn" onclick="setLanguage('uz_cyr')">Ўз (Кирилл)</button>
-        <button class="lang-btn" onclick="setLanguage('ru')">Ру</button>
-        <button class="lang-btn" onclick="setLanguage('en')">En</button>
-        <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
-        <button class="lang-btn" onclick="logout()">Chiqish</button>
-    </div>
-    <h1 id="title">Admin paneli</h1>
-    <div class="section">
-        <h2 id="categories_title">Kategoriyalar</h2>
-        <form method="POST" action="/add_category">
-            <label for="category_name">Kategoriya nomi:</label>
-            <input type="text" id="category_name" name="name" placeholder="Kategoriya nomi">
-            <label for="parent_id">Yuqori kategoriya:</label>
-            <select id="parent_id" name="parent_id">
-                <option value="">Hech qaysi (asosiy kategoriya)</option>
-                {% for cat in categories %}
-                    <option value="{{ cat[0] }}">{{ cat[1] }} (ID: {{ cat[0] }})</option>
-                {% endfor %}
-            </select>
-            <button class="add-btn" type="submit">Qo‘shish</button>
-        </form>
-        <table>
-            <tr><th>ID</th><th>Nomi</th><th>Yuqori kategoriya</th><th>Amallar</th></tr>
-            {% for category in categories %}
-                <tr>
-                    <td>{{ category[0] }}</td>
-                    <td>{{ category[1] }}</td>
-                    <td>{{ category[2] or "Yo‘q" }}</td>
-                    <td>
-                        <button class="edit-btn" onclick="editCategory({{ category[0] }}, '{{ category[1] }}')">Tahrirlash</button>
-                        <button class="delete-btn" onclick="deleteCategory({{ category[0] }})">O‘chirish</button>
-                    </td>
-                </tr>
-            {% endfor %}
-        </table>
-    </div>
-    <div class="section">
-        <h2 id="services_title">Xizmatlar</h2>
-        <form method="POST" action="/add_service" id="addServiceForm">
-            <label for="service_name">Xizmat nomi:</label>
-            <input type="text" id="service_name" name="name" placeholder="Xizmat nomi">
-            <label for="category_id">Kategoriya:</label>
-            <select id="category_id" name="category_id">
-                <option value="">Kategoriyani tanlang</option>
-                {% for cat in categories %}
-                    <option value="{{ cat[0] }}">{{ cat[1] }} (ID: {{ cat[0] }})</option>
-                {% endfor %}
-            </select>
-            <button class="add-btn" type="submit">Qo‘shish</button>
-        </form>
-        <table>
-            <tr><th>ID</th><th>Nomi</th><th>Kategoriya</th><th>Amallar</th></tr>
-            {% for service in services %}
-                <tr>
-                    <td>{{ service[0] }}</td>
-                    <td>{{ service[1] }}</td>
-                    <td>{{ service[2] }}</td>
-                    <td>
-                        <button class="edit-btn" onclick="editService({{ service[0] }}, '{{ service[1] }}')">Tahrirlash</button>
-                        <button class="delete-btn" onclick="deleteService({{ service[0] }})">O‘chirish</button>
-                    </td>
-                </tr>
-            {% endfor %}
-        </table>
-    </div>
-    <div class="section">
-        <h2 id="operators_title">Operatorlar</h2>
-        <form method="POST" action="/add_operator">
-            <label for="operator_name">Operator ismi:</label>
-            <input type="text" id="operator_name" name="name" placeholder="Operator ismi">
-            <label for="operator_password">Parol:</label>
-            <input type="password" id="operator_password" name="password" placeholder="Parol">
-            <label for="operator_number">Operator raqami:</label>
-            <input type="number" id="operator_number" name="operator_number" placeholder="Operator raqami">
-            <button class="add-btn" type="submit">Qo‘shish</button>
-        </form>
-        <table>
-            <tr>
-                <th>ID</th>
-                <th>Ism</th>
-                <th>Holati</th>
-                <th>Operator raqami</th>
-                <th>Xizmatlar</th>
-                <th>Amallar</th>
-            </tr>
-            {% for operator in operators %}
-            <tr>
-                <td>{{ operator[0] }}</td>
-                <td>{{ operator[1] }}</td>
-                <td>{{ operator[2] }}</td>
-                <td>{{ operator[3] or "" }}</td>
-                    <td>
-                        <div class="service-assign">
-                            <select id="service_select_{{ operator[0] }}" onchange="assignService({{ operator[0] }}, this.value)">
-                                <option value="">Xizmat tanlash</option>
-                                {% for service in services %}
-                                    <option value="{{ service[0] }}">{{ service[1] }}</option>
-                                {% endfor %}
-                            </select>
-                            <button class="assign-btn" onclick="unassignService({{ operator[0] }})">Xizmatni olib tashlash</button>
-                        </div>
-                        <ul id="service_list_{{ operator[0] }}">
-                            {% for os in operator_services if os[0] == operator[0] %}
-                                {% for service in services if service[0] == os[1] %}
-                                    <li data-service-id="{{ service[0] }}">{{ service[1] }}</li>
-                                {% endfor %}
-                            {% endfor %}
-                        </ul>
-                    </td>
-                    <td>
-                        <button class="edit-btn" onclick="editOperator({{ operator[0] }}, '{{ operator[1] }}', '{{ operator[2] }}', '{{ operator[3] or "" }}')">Tahrirlash</button>
-                        <button class="delete-btn" onclick="deleteOperator({{ operator[0] }})">O‘chirish</button>
-                    </td>
-                </tr>
-            {% endfor %}
-        </table>
-    </div>
-    <div class="section">
-        <h2 id="export_title">Hisobot eksport qilish</h2>
-        <form id="exportReportForm">
-            <label for="exportOperatorId">Operator:</label>
-            <select id="exportOperatorId">
-                <option value="">Barcha operatorlar</option>
-                {% for operator in operators %}
-                    <option value="{{ operator[0] }}">{{ operator[1] }}</option>
-                {% endfor %}
-            </select>
-            <label for="exportServiceId">Xizmat:</label>
-            <select id="exportServiceId">
-                <option value="">Barcha xizmatlar</option>
-                {% for service in services %}
-                    <option value="{{ service[0] }}">{{ service[1] }}</option>
-                {% endfor %}
-            </select>
-            <label for="startDate">Boshlanish sanasi:</label>
-            <input type="date" id="startDate">
-            <label for="endDate">Tugash sanasi:</label>
-            <input type="date" id="endDate">
-            <label for="reportType">Hisobot turi:</label>
-            <select id="reportType">
-                <option value="overall">Umumiy</option>
-                <option value="monthly">Oylik</option>
-                <option value="yearly">Yillik</option>
-                <option value="by_operator">Operator bo‘yicha</option>
-            </select>
-            <button class="add-btn" type="submit">Eksport qilish</button>
-        </form>
-    </div>
-    <div class="section">
-        <h2 id="analytics_title">Analitika</h2>
-        <div class="stats">
-            <p id="waiting">Kutayotganlar: {{ waiting|length }}</p>
-            <p id="avg_time">O‘rtacha xizmat vaqti: {{ avg_time }} daqiqa</p>
+<body class="flex flex-col min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 text-white p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-2xl font-bold" data-translate="admin_panel_title">Admin paneli</h1>
+        <div class="flex items-center space-x-4">
+            <!-- Language Selector -->
+            <div class="relative">
+                <select id="language-select" class="bg-gray-700 text-white py-2 px-3 rounded-md cursor-pointer">
+                    <!-- Options will be loaded dynamically by JavaScript -->
+                </select>
+            </div>
+            <!-- Theme Toggle -->
+            <button id="theme-toggle" class="theme-toggle p-2 rounded-md bg-gray-700 text-white">🌙</button>
+            <!-- Daltonic Mode Toggle -->
+            <button id="daltonic-toggle" class="daltonic-toggle p-2 rounded-md bg-gray-700 text-white">👁️‍🗨️</button>
+            <!-- Logout Button -->
+            <a href="{{ SERVER_URL }}/admin_logout" class="btn-danger" data-translate="logout_button">Chiqish</a>
         </div>
-        <h3 id="waiting_title">Kutayotgan mijozlar</h3>
-        <table>
-            <tr><th>Navbat</th><th>Xizmat</th></tr>
-            {% for ticket in waiting %}
-                <tr><td>{{ ticket[0] }}</td><td>{{ ticket[1] }}</td></tr>
-            {% endfor %}
-        </table>
-        <h3 id="finished_title">Tugatilgan navbatlar</h3>
-        <table>
-            <tr><th>Navbat</th><th>Xizmat</th><th>Operator</th><th>Yaratildi</th><th>Tugatildi</th></tr>
-            {% for stat in stats %}
-                <tr><td>{{ stat[0] }}</td><td>{{ stat[1] }}</td><td>{{ stat[2] or 'N/A' }}</td><td>{{ stat[3] }}</td><td>{{ stat[4] }}</td></tr>
-            {% endfor %}
-        </table>
-    </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-6 flex flex-col items-center">
+        <div class="container w-full max-w-4xl">
+            <h2 class="text-xl font-semibold mb-4" data-translate="admin_dashboard_link">Admin-paneli</h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <!-- Statistics Card -->
+                <div class="bg-blue-100 dark:bg-blue-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-blue-800 dark:text-blue-100" data-translate="statistics">Statistika</h3>
+                    <p class="text-sm text-blue-700 dark:text-blue-200 mb-4" data-translate="statistics_description">Kunlik, operator va xizmat statistikasini koʻrish.</p>
+                    <a href="{{ SERVER_URL }}/admin/statistics" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Language Management Card -->
+                <div class="bg-green-100 dark:bg-green-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-green-800 dark:text-green-100" data-translate="language_management">Tillar boshqaruvi</h3>
+                    <p class="text-sm text-green-700 dark:text-green-200 mb-4" data-translate="language_management_description">Tizim uchun tillarni qoʻshish, tahrirlash va oʻchirish.</p>
+                    <a href="{{ SERVER_URL }}/admin/languages" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Webhook Management Card -->
+                <div class="bg-purple-100 dark:bg-purple-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-purple-800 dark:text-purple-100" data-translate="webhook_management">Webhooklar boshqaruvi</h3>
+                    <p class="text-sm text-purple-700 dark:text-purple-200 mb-4" data-translate="webhook_management_description">Tizim hodisalari uchun veb-kancalarni sozlash.</p>
+                    <a href="{{ SERVER_URL }}/admin/webhooks" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Category Management Card -->
+                <div class="bg-red-100 dark:bg-red-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-red-800 dark:text-red-100" data-translate="category_management">Kategoriyalarni boshqarish</h3>
+                    <p class="text-sm text-red-700 dark:text-red-200 mb-4" data-translate="category_management_description">Xizmatlar uchun kategoriyalarni qoʻshish, tahrirlash, oʻchirish.</p>
+                    <a href="{{ SERVER_URL }}/admin/categories" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Service Management Card -->
+                <div class="bg-yellow-100 dark:bg-yellow-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-yellow-800 dark:text-yellow-100" data-translate="service_management">Xizmatlarni boshqarish</h3>
+                    <p class="text-sm text-yellow-700 dark:text-yellow-200 mb-4" data-translate="service_management_description">Xizmatlarni qoʻshish, tahrirlash, oʻchirish va ularni kategoriyalarga tayinlash.</p>
+                    <a href="{{ SERVER_URL }}/admin/services" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Operator Management Card -->
+                <div class="bg-teal-100 dark:bg-teal-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-teal-800 dark:text-teal-100" data-translate="operator_management">Operatorlarni boshqarish</h3>
+                    <p class="text-sm text-teal-700 dark:text-teal-200 mb-4" data-translate="operator_management_description">Operatorlarni qoʻshish, tahrirlash, oʻchirish va ularga xizmatlarni tayinlash.</p>
+                    <a href="{{ SERVER_URL }}/admin/operators" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Media Management Card -->
+                <div class="bg-indigo-100 dark:bg-indigo-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-indigo-800 dark:text-indigo-100" data-translate="media_management">Media fayllarni boshqarish</h3>
+                    <p class="text-sm text-indigo-700 dark:text-indigo-200 mb-4" data-translate="media_management_description">Tizimda foydalaniladigan media fayllarni yuklash, koʻrish va oʻchirish.</p>
+                    <a href="{{ SERVER_URL }}/admin/media" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Translation Management Card -->
+                <div class="bg-orange-100 dark:bg-orange-800 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-orange-800 dark:text-orange-100" data-translate="translation_management">Tarjimalarni boshqarish</h3>
+                    <p class="text-sm text-orange-700 dark:text-orange-200 mb-4" data-translate="translation_management_description">Tizim matnlarining tarjimalarini qoʻshish, tahrirlash va oʻchirish.</p>
+                    <a href="{{ SERVER_URL }}/admin/translations" class="btn-primary text-center w-full" data-translate="manage_button">Boshqarish</a>
+                </div>
+
+                <!-- Feedback Management Card (Placeholder) -->
+                <div class="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-medium mb-2 text-gray-800 dark:text-gray-100" data-translate="feedback_management">Fikr-mulohazalarni boshqarish</h3>
+                    <p class="text-sm text-gray-700 dark:text-gray-200 mb-4" data-translate="feedback_management_description">Mijozlarning fikr-mulohazalarini koʻrish va boshqarish.</p>
+                    <button class="btn-primary text-center w-full opacity-50 cursor-not-allowed" disabled data-translate="manage_button">Boshqarish</button>
+                </div>
+            </div>
+
+            <!-- Generate Daily Statistics Section -->
+            <div class="container bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md mb-8">
+                <h2 class="text-xl font-semibold mb-4" data-translate="trigger_daily_stats_title">Kunlik statistikani yaratish</h2>
+                <p class="text-sm text-gray-600 dark:text-gray-300 mb-4" data-translate="trigger_daily_stats_description">Bu tugma oldingi kun uchun statistik maʼlumotlarni qoʻlda yaratish imkonini beradi. Odatda bu avtomatik ravishda bajariladi.</p>
+                <button id="generateDailyStatsBtn" class="btn-primary w-full" data-translate="generate_button">Yaratish</button>
+            </div>
+
+            <!-- Send Telegram Message Section -->
+            <div class="container bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-semibold mb-4" data-translate="send_telegram_message_title">Telegram orqali xabar yuborish</h2>
+                <div class="mb-4">
+                    <label for="operatorSelect" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <span data-translate="operator">Operator</span>:
+                    </label>
+                    <select id="operatorSelect" class="input-field w-full">
+                        <option value="" data-translate="select_operator_for_redirect">-- Operatorni tanlang (ixtiyoriy) --</option>
+                        <!-- Options will be loaded dynamically -->
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="telegramMessage" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <span data-translate="message">Xabar</span>:
+                    </label>
+                    <textarea id="telegramMessage" rows="4" class="input-field w-full" placeholder="Xabar matni..." data-translate="telegram_message_placeholder"></textarea>
+                </div>
+                <button id="sendTelegramMessageBtn" class="btn-primary w-full" data-translate="send_button">Yuborish</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
 
     <script>
-        const serverUrl = "{{ server_url }}";
-        const socket = io(serverUrl);
-        const translations = {
-            uz_lat: { 
-                title: "Admin paneli",
-                categories: "Kategoriyalar",
-                services: "Xizmatlar",
-                operators_title: "Operatorlar",
-                analytics_title: "Analitika",
-                export_title: "Hisobot eksport qilish",
-                add: "Qo‘shish",
-                edit: "Tahrirlash",
-                delete_btn: "O‘chirish",
-                assign: "Xizmatni olib tashlash",
-                name: {
-                    category_name: "Kategoriya nomi",
-                    service: "Xizmat nomi",
-                    category_id: "Kategoriyani tanlang",
-                    operator_name: "Operator ismi",
-                    parent_id: "Yuqori kategoriya"
-                },
-                actions: "Amallar",
-                id: "ID",
-                status: "Holati",
-                none: "Yo‘q",
-                waiting: "Kutayotganlar",
-                avg_time: "O‘rtacha xizmat vaqti",
-                waiting_title: "Kutayotgan mijozlar",
-                finished_title: "Tugatilgan navbatlar",
-                export: "Eksport qilish",
-                all_operators: "Barcha operatorlar",
-                all_services: "Barcha xizmatlar",
-                start_date: "Boshlanish sanasi",
-                end_date: "Tugash sanasi",
-                report_type: "Hisobot turi",
-                overall: "Umumiy",
-                monthly: "Oylik",
-                yearly: "Yillik",
-                by_operator: "Operator bo‘yicha"
-            },
-            uz_cyr: { 
-                title: "Админ панели",
-                categories: "Категориялар",
-                services: "Хизматлар",
-                operators_title: "Операторлар",
-                analytics_title: "Аналитика",
-                export_title: "Ҳисобот экспорт қилиш",
-                add: "Қўшиш",
-                edit: "Таҳрирлаш",
-                delete_btn: "Ўчириш",
-                assign: "Хизматни олиб ташлаш",
-                name: {
-                    category_name: "Категория номи",
-                    service: "Хизмат номи",
-                    category_id: "Категорияни танланг",
-                    operator_name: "Оператор исми",
-                    parent_id: "Юқори категория"
-                },
-                actions: "Амаллар",
-                id: "ID",
-                status: "Ҳолати",
-                none: "Йўқ",
-                waiting: "Кутаётганлар",
-                avg_time: "Ўртача хизмат вақти",
-                waiting_title: "Кутаётган мижозлар",
-                finished_title: "Тугатилган навбатлар",
-                export: "Экспорт қилиш",
-                all_operators: "Барча операторлар",
-                all_services: "Барча хизматлар",
-                start_date: "Бошланиш санаси",
-                end_date: "Тугаш санаси",
-                report_type: "Ҳисобот тури",
-                overall: "Умумий",
-                monthly: "Ойлик",
-                yearly: "Йиллик",
-                by_operator: "Оператор бўйича"
-            },
-            ru: { 
-                title: "Админ-панель",
-                categories: "Категории",
-                services: "Услуги",
-                operators_title: "Операторы",
-                analytics_title: "Аналитика",
-                export_title: "Экспорт отчёта",
-                add: "Добавить",
-                edit: "Редактировать",
-                delete_btn: "Удалить",
-                assign: "Удалить услугу",
-                name: {
-                    category_name: "Название категории",
-                    service: "Название услуги",
-                    category_id: "Выберите категорию",
-                    operator_name: "Имя оператора",
-                    parent_id: "Родительская категория"
-                },
-                actions: "Действия",
-                id: "ID",
-                status: "Статус",
-                none: "Нет",
-                waiting: "Ожидающие",
-                avg_time: "Среднее время обслуживания",
-                waiting_title: "Ожидающие клиенты",
-                finished_title: "Завершённые талоны",
-                export: "Экспортировать",
-                all_operators: "Все операторы",
-                all_services: "Все услуги",
-                start_date: "Дата начала",
-                end_date: "Дата окончания",
-                report_type: "Тип отчёта",
-                overall: "Общий",
-                monthly: "Месячный",
-                yearly: "Годовой",
-                by_operator: "По оператору"
-            },
-            en: { 
-                title: "Admin Panel",
-                categories: "Categories",
-                services: "Services",
-                operators_title: "Operators",
-                analytics_title: "Analytics",
-                export_title: "Export Report",
-                add: "Add",
-                edit: "Edit",
-                delete_btn: "Delete",
-                assign: "Remove Service",
-                name: {
-                    category_name: "Category Name",
-                    service: "Service Name",
-                    category_id: "Select Category",
-                    operator_name: "Operator Name",
-                    parent_id: "Parent Category"
-                },
-                actions: "Actions",
-                id: "ID",
-                status: "Status",
-                none: "None",
-                waiting: "Waiting",
-                avg_time: "Average Service Time",
-                waiting_title: "Waiting Clients",
-                finished_title: "Finished Tickets",
-                export: "Export",
-                all_operators: "All Operators",
-                all_services: "All Services",
-                start_date: "Start Date",
-                end_date: "End Date",
-                report_type: "Report Type",
-                overall: "Overall",
-                monthly: "Monthly",
-                yearly: "Yearly",
-                by_operator: "By Operator"
-            }
-        };
-        let currentLang = "uz_lat";
+        const SERVER_URL = "{{ SERVER_URL }}";
+        let translations = {};
+        let currentLang = localStorage.getItem('lang') || 'uz_lat'; // Default to Uzbek Latin
 
-        function setLanguage(lang) {
-            currentLang = lang;
-            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active"));
-            document.querySelector(`button[onclick="setLanguage('${lang}')"]`).classList.add("active");
-            document.getElementById("title").innerText = translations[lang].title;
-            document.getElementById("categories_title").innerText = translations[lang].categories;
-            document.getElementById("services_title").innerText = translations[lang].services;
-            document.getElementById("operators_title").innerText = translations[lang].operators_title;
-            document.getElementById("analytics_title").innerText = translations[lang].analytics_title;
-            document.getElementById("export_title").innerText = translations[lang].export_title;
-            document.getElementById("waiting_title").innerText = translations[lang].waiting_title;
-            document.getElementById("finished_title").innerText = translations[lang].finished_title;
-            document.querySelectorAll(".add-btn").forEach(btn => btn.innerText = translations[lang].add);
-            document.querySelectorAll(".edit-btn").forEach(btn => btn.innerText = translations[lang].edit);
-            document.querySelectorAll(".delete-btn").forEach(btn => btn.innerText = translations[lang].delete_btn);
-            document.querySelectorAll(".assign-btn").forEach(btn => btn.innerText = translations[lang].assign);
-            document.querySelector(".section:nth-child(2) table th:nth-child(1)").innerText = translations[lang].id;
-            document.querySelector(".section:nth-child(2) table th:nth-child(2)").innerText = translations[lang].name.category_name;
-            document.querySelector(".section:nth-child(2) table th:nth-child(3)").innerText = translations[lang].name.parent_id;
-            document.querySelector(".section:nth-child(2) table th:nth-child(4)").innerText = translations[lang].actions;
-            document.querySelector(".section:nth-child(3) table th:nth-child(1)").innerText = translations[lang].id;
-            document.querySelector(".section:nth-child(3) table th:nth-child(2)").innerText = translations[lang].name.service;
-            document.querySelector(".section:nth-child(3) table th:nth-child(3)").innerText = translations[lang].name.category_id;
-            document.querySelector(".section:nth-child(3) table th:nth-child(4)").innerText = translations[lang].actions;
-            document.querySelector(".section:nth-child(4) table th:nth-child(1)").innerText = translations[lang].id;
-            document.querySelector(".section:nth-child(4) table th:nth-child(2)").innerText = translations[lang].name.operator_name;
-            document.querySelector(".section:nth-child(4) table th:nth-child(3)").innerText = translations[lang].status;
-            document.querySelector(".section:nth-child(4) table th:nth-child(4)").innerText = translations[lang].services;
-            document.querySelector(".section:nth-child(4) table th:nth-child(5)").innerText = translations[lang].actions;
-            document.querySelector("form[action='/add_category'] input[name='name']").placeholder = translations[lang].name.category_name;
-            document.querySelector("form[action='/add_service'] input[name='name']").placeholder = translations[lang].name.service;
-            document.querySelector("form[action='/add_service'] select[name='category_id'] option:first-child").innerText = translations[lang].name.category_id;
-            document.querySelector("form[action='/add_operator'] input[name='name']").placeholder = translations[lang].name.operator_name;
-            document.getElementById("waiting").innerText = `${translations[lang].waiting}: {{ waiting|length }}`;
-            document.getElementById("avg_time").innerText = `${translations[lang].avg_time}: {{ avg_time }} daqiqa`;
-            document.querySelector("#exportReportForm select#exportOperatorId option:first-child").innerText = translations[lang].all_operators;
-            document.querySelector("#exportReportForm select#exportServiceId option:first-child").innerText = translations[lang].all_services;
-            document.querySelector("#exportReportForm label[for='startDate']").innerText = translations[lang].start_date + ':';
-            document.querySelector("#exportReportForm label[for='endDate']").innerText = translations[lang].end_date + ':';
-            document.querySelector("#exportReportForm label[for='reportType']").innerText = translations[lang].report_type + ':';
-            document.querySelector("#exportReportForm #reportType option[value='overall']").innerText = translations[lang].overall;
-            document.querySelector("#exportReportForm #reportType option[value='monthly']").innerText = translations[lang].monthly;
-            document.querySelector("#exportReportForm #reportType option[value='yearly']").innerText = translations[lang].yearly;
-            document.querySelector("#exportReportForm #reportType option[value='by_operator']").innerText = translations[lang].by_operator;
-        }
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadTranslations(currentLang);
+            populateLanguageSelector();
+            setupThemeToggle();
+            setupDaltonicToggle();
+            await fetchOperatorsForTelegramMessage();
 
-        function editCategory(id, name) {
-            const newName = prompt(`${translations[currentLang].name.category_name}:`, name);
-            if (newName) {
-                fetch(`${serverUrl}/edit_category`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({id: id, name: newName})
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    location.reload();
-                }).catch(error => alert(error.message));
-            }
-        }
+            // Event listener for generating daily statistics
+            document.getElementById('generateDailyStatsBtn').addEventListener('click', async () => {
+                showModal(
+                    translations.confirm_generate_stats || 'Вы уверены, что хотите сгенерировать ежедневную статистику за вчерашний день?',
+                    async () => {
+                        try {
+                            const response = await fetch(`${SERVER_URL}/api/admin/generate_daily_stats`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                            });
+                            const data = await response.json();
+                            if (response.ok) {
+                                showNotification(data.message, 'info');
+                            } else {
+                                showNotification(data.message || 'Failed to generate daily statistics.', 'danger');
+                            }
+                        } catch (error) {
+                            console.error("Error generating daily stats:", error);
+                            showNotification(`Error: ${error.message}`, 'danger');
+                        }
+                    }
+                );
+            });
 
-        function deleteCategory(id) {
-            if (confirm(`${translations[currentLang].categories} o‘chirishni tasdiqlaysizmi?`)) {
-                fetch(`${serverUrl}/delete_category`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({id: id})
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    location.reload();
-                }).catch(error => alert(error.message));
-            }
-        }
+            // Event listener for sending Telegram message
+            document.getElementById('sendTelegramMessageBtn').addEventListener('click', async () => {
+                const operatorId = document.getElementById('operatorSelect').value;
+                const message = document.getElementById('telegramMessage').value;
 
-        function editService(id, name) {
-            const newName = prompt(`${translations[currentLang].name.service}:`, name);
-            if (newName) {
-                fetch(`${serverUrl}/edit_service`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({id: id, name: newName})
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    location.reload();
-                }).catch(error => alert(error.message));
-            }
-        }
+                if (!operatorId) {
+                    showNotification(translations.select_operator_error || 'Пожалуйста, выберите оператора.', 'danger');
+                    return;
+                }
+                if (!message.trim()) {
+                    showNotification(translations.empty_message_error || 'Сообщение не может быть пустым.', 'danger');
+                    return;
+                }
 
-        function deleteService(id) {
-            if (confirm(`${translations[currentLang].services} o‘chirishni tasdiqlaysizmi?`)) {
-                fetch(`${serverUrl}/delete_service`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({id: id})
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    location.reload();
-                }).catch(error => alert(error.message));
-            }
-        }
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/admin/send_telegram_message`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ operator_id: parseInt(operatorId), message: message })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showNotification(data.message, 'info');
+                        document.getElementById('telegramMessage').value = ''; // Clear message field
+                    } else {
+                        showNotification(data.message || 'Failed to send Telegram message.', 'danger');
+                    }
+                } catch (error) {
+                    console.error("Error sending Telegram message:", error);
+                    showNotification(`Error: ${error.message}`, 'danger');
+                }
+            });
+        });
 
-        function editOperator(id, name, status, operator_number) {
-            const newName = prompt(`${translations[currentLang].name.operator_name}:`, name);
-            const newPassword = prompt("Yangi parol (bo‘sh qoldirish mumkin):", "");
-            const newStatus = prompt("Status (active/break):", status);
-            const newNumber = prompt("Operator raqami:", operator_number || "");
-            if (newName) {
-                fetch(`${serverUrl}/edit_operator`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({
-                        id: id,
-                        name: newName,
-                        password: newPassword,
-                        status: newStatus || status,
-                        operator_number: newNumber || null
-                    })
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    location.reload();
-                }).catch(error => alert(error.message));
-            }
-        }
-
-        function deleteOperator(id) {
-            if (confirm(`${translations[currentLang].operators_title} o‘chirishni tasdiqlaysizmi?`)) {
-                fetch(`${serverUrl}/delete_operator`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({id: id})
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    location.reload();
-                }).catch(error => alert(error.message));
-            }
-        }
-
-        function assignService(operatorId, serviceId) {
-            if (serviceId) {
-                fetch(`${serverUrl}/assign_service`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({operator_id: operatorId, service_id: serviceId})
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    // Update UI without reloading
-                    const serviceSelect = document.getElementById(`service_select_${operatorId}`);
-                    const serviceName = serviceSelect.options[serviceSelect.selectedIndex].text;
-                    const serviceList = document.getElementById(`service_list_${operatorId}`);
-                    const li = document.createElement("li");
-                    li.dataset.serviceId = serviceId;
-                    li.textContent = serviceName;
-                    serviceList.appendChild(li);
-                    serviceSelect.value = ""; // Reset select
-                }).catch(error => alert(error.message));
-            }
-        }
-
-        function unassignService(operatorId) {
-            const serviceId = prompt("O‘chiriladigan xizmat ID sini kiriting:");
-            if (serviceId) {
-                fetch(`${serverUrl}/unassign_service`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({operator_id: operatorId, service_id: serviceId})
-                }).then(response => response.json()).then(data => {
-                    if (data.status === "error") throw new Error(data.message);
-                    // Update UI without reloading
-                    const serviceList = document.getElementById(`service_list_${operatorId}`);
-                    const li = serviceList.querySelector(`li[data-service-id="${serviceId}"]`);
-                    if (li) li.remove();
-                }).catch(error => alert(error.message));
-            }
-        }
-
-        function logout() {
-            window.location.href = '/admin_logout';
-        }
-
-        function toggleTheme() {
-            document.body.classList.toggle("dark");
-            const isDark = document.body.classList.contains("dark");
-            localStorage.setItem("theme", isDark ? "dark" : "light");
-            document.querySelector(".theme-toggle").innerText = isDark ? "☀️" : "🌙";
-        }
-
-        // Export form submission
-        document.getElementById("exportReportForm")?.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const operatorId = document.getElementById("exportOperatorId").value || null;
-            const serviceId = document.getElementById("exportServiceId").value || null;
-            const startDate = document.getElementById("startDate").value || null;
-            const endDate = document.getElementById("endDate").value || null;
-            const reportType = document.getElementById("reportType").value;
-
+        async function loadTranslations(lang) {
             try {
-                const response = await fetch(`${serverUrl}/export_report`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({
-                        operator_id: operatorId,
-                        service_id: serviceId,
-                        start_date: startDate,
-                        end_date: endDate,
-                        report_type: reportType
-                    })
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                translations = await response.json();
+                applyTranslations();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+            }
+        }
+
+        function applyTranslations() {
+            document.querySelectorAll('[data-translate]').forEach(element => {
+                const key = element.getAttribute('data-translate');
+                if (translations[key]) {
+                    element.innerText = translations[key];
+                }
+            });
+            document.querySelectorAll('[data-translate-placeholder]').forEach(element => {
+                const key = element.getAttribute('data-translate-placeholder');
+                if (translations[key]) {
+                    element.placeholder = translations[key];
+                }
+            });
+        }
+
+        async function populateLanguageSelector() {
+            const langSelect = document.getElementById('language-select');
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                const languages = await response.json();
+                langSelect.innerHTML = ''; // Clear existing options
+                languages.forEach(lang => {
+                    const option = document.createElement('option');
+                    option.value = lang.lang_code;
+                    option.innerText = lang.display_name;
+                    if (lang.lang_code === currentLang) {
+                        option.selected = true;
+                    }
+                    langSelect.appendChild(option);
                 });
 
-                if (!response.ok) throw new Error("Hisobotni yuklab olishda xato: " + response.statusText);
-                
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `report_${Date.now()}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
+                langSelect.addEventListener('change', (event) => {
+                    currentLang = event.target.value;
+                    localStorage.setItem('lang', currentLang);
+                    loadTranslations(currentLang);
+                });
             } catch (error) {
-                alert(error.message);
+                console.error("Error populating language selector:", error);
             }
-        });
-
-        socket.on('new_ticket', () => {
-            console.log("New ticket added");
-            location.reload();
-        });
-
-        // Initialize theme
-        if (localStorage.getItem("theme") === "dark") {
-            document.body.classList.add("dark");
-            document.querySelector(".theme-toggle").innerText = "☀️";
         }
 
-        setLanguage("uz_lat");
+        function setupThemeToggle() {
+            const themeToggle = document.getElementById('theme-toggle');
+            const savedTheme = localStorage.getItem('theme');
+
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark');
+                themeToggle.innerText = '☀️';
+            } else {
+                themeToggle.innerText = '🌙';
+            }
+
+            themeToggle.addEventListener('click', () => {
+                document.body.classList.toggle('dark');
+                if (document.body.classList.contains('dark')) {
+                    localStorage.setItem('theme', 'dark');
+                    themeToggle.innerText = '☀️';
+                } else {
+                    localStorage.setItem('theme', 'light');
+                    themeToggle.innerText = '🌙';
+                }
+            });
+        }
+
+        function setupDaltonicToggle() {
+            const daltonicToggle = document.getElementById('daltonic-toggle');
+            const savedDaltonicMode = localStorage.getItem('daltonic');
+
+            if (savedDaltonicMode === 'enabled') {
+                document.body.classList.add('daltonic');
+                daltonicToggle.innerText = '🌈'; // Or another suitable icon
+            } else {
+                daltonicToggle.innerText = '👁️‍🗨️';
+            }
+
+            daltonicToggle.addEventListener('click', () => {
+                document.body.classList.toggle('daltonic');
+                if (document.body.classList.contains('daltonic')) {
+                    localStorage.setItem('daltonic', 'enabled');
+                    daltonicToggle.innerText = '🌈';
+                } else {
+                    localStorage.setItem('daltonic', 'disabled');
+                    daltonicToggle.innerText = '👁️‍🗨️';
+                }
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notificationContainer = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerText = message;
+            notificationContainer.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function showModal(message, onConfirm) {
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <p>${message}</p>
+                    <div class="modal-buttons">
+                        <button id="confirmBtn" class="btn-primary" data-translate="confirm_button">Tasdiqlash</button>
+                        <button id="cancelBtn" class="btn-danger" data-translate="cancel_button">Bekor qilish</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            applyTranslations(); // Apply translations to modal content
+
+            document.getElementById('confirmBtn').onclick = () => {
+                onConfirm();
+                modal.remove();
+            };
+            document.getElementById('cancelBtn').onclick = () => {
+                modal.remove();
+            };
+        }
+
+        async function fetchOperatorsForTelegramMessage() {
+            const operatorSelect = document.getElementById('operatorSelect');
+            try {
+                const response = await fetch(`${SERVER_URL}/api/operators`);
+                const operators = await response.json();
+                // Clear existing options, but keep the default "Select operator" option
+                operatorSelect.innerHTML = `<option value="" data-translate="select_operator_for_redirect">${translations.select_operator_for_redirect || '-- Operatorni tanlang (ixtiyoriy) --'}</option>`;
+                operators.forEach(operator => {
+                    const option = document.createElement('option');
+                    option.value = operator.id;
+                    option.innerText = `${operator.name} (${operator.operator_number})`;
+                    operatorSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error fetching operators for Telegram message:", error);
+                showNotification(translations.error_fetch || 'Error fetching operators.', 'danger');
+            }
+        }
     </script>
+</body>
+</html>

@@ -2,228 +2,643 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Панель статистики</title>
-    <link rel="stylesheet" href="/static/styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-    <div id="app">
-        <header>
-            <div class="lang-switcher">
-                <button @click="changeLang('uz_lat')">Uz (Lat)</button>
-                <button @click="changeLang('uz_cyr')">Ўз (Кирилл)</button>
-                <button @click="changeLang('ru')">Ру</button>
-                <button @click="changeLang('en')">En</button>
-                <button @click="toggleTheme">🌙</button>
-                <a href="/admin_logout">Выход</a>
-            </div>
-        </header>
-        <main>
-            <h1>Панель статистики</h1>
-            <nav>
-                <ul>
-                    <li><a href="/admin">Админ-панель</a></li>
-                    <li><a href="/admin/statistics">Статистика</a></li>
-                </ul>
-            </nav>
-            <div class="section">
-                <h2>Фильтры</h2>
-                <form id="stats-filter">
-                    <label>Тип представления:
-                        <select v-model="viewType">
-                            <option value="service">По услугам</option>
-                            <option value="operator_overall">По операторам (общее)</option>
-                            <option value="operator_individual">По оператору (индивидуально)</option>
-                        </select>
-                    </label>
-                    <label>Услуга:
-                        <select v-model="serviceId">
-                            <option value="">Все услуги</option>
-                            <option v-for="service in services" :value="service[0]">{{ service[1] }}</option>
-                        </select>
-                    </label>
-                    <label>Оператор:
-                        <select v-model="operatorId" :disabled="viewType !== 'operator_individual'">
-                            <option value="">Все операторы</option>
-                            <option v-for="operator in operators" :value="operator[0]">{{ operator[1] }}</option>
-                        </select>
-                    </label>
-                    <label>Временной фильтр:
-                        <select v-model="timeFilter">
-                            <option value="daily">Ежедневно</option>
-                            <option value="monthly">Ежемесячно</option>
-                            <option value="half_yearly">Полугодично</option>
-                            <option value="yearly">Ежегодно</option>
-                            <option value="custom">Пользовательский</option>
-                        </select>
-                    </label>
-                    <label v-if="timeFilter === 'custom'">Начальная дата:
-                        <input type="date" v-model="startDate">
-                    </label>
-                    <label v-if="timeFilter === 'custom'">Конечная дата:
-                        <input type="date" v-model="endDate">
-                    </label>
-                    <button type="button" @click="fetchData">Применить</button>
-                    <button type="button" @click="exportData">Экспорт в Excel</button>
-                </form>
-            </div>
-            <div class="section">
-                <h2>Результаты</h2>
-                <div v-if="chartData.length">
-                    <canvas id="statsChart"></canvas>
-                </div>
-                <table v-if="tableData.length">
-                    <tr>
-                        <th>Номер талона</th>
-                        <th>Услуга</th>
-                        <th>Категория</th>
-                        <th>Оператор</th>
-                        <th>Номер оператора</th>
-                        <th>Статус</th>
-                        <th>Создано</th>
-                        <th>Завершено</th>
-                        <th>Время обслуживания (мин)</th>
-                    </tr>
-                    <tr v-for="row in tableData">
-                        <td>{{ row['Ticket Number'] }}</td>
-                        <td>{{ row['Service Name'] }}</td>
-                        <td>{{ row['Category Name'] }}</td>
-                        <td>{{ row['Operator Name'] }}</td>
-                        <td>{{ row['Operator Number'] }}</td>
-                        <td>{{ row['Status'] }}</td>
-                        <td>{{ row['Created At'] }}</td>
-                        <td>{{ row['Finished At'] }}</td>
-                        <td>{{ row['Service Time'] ? row['Service Time'].toFixed(2) : 'N/A' }}</td>
-                    </tr>
-                </table>
-            </div>
-            <div class="section">
-                <h2>Аналитика и рекомендации</h2>
-                <h3>Проблемные услуги</h3>
-                <ul>
-                    <li v-for="service in problemServices">
-                        {{ service.name }}: Среднее время {{ service.avg_service_time.toFixed(2) }} мин, Споры: {{ service.dispute_count }}
-                    </li>
-                </ul>
-                <h3>Проблемные операторы</h3>
-                <ul>
-                    <li v-for="operator in problemOperators">
-                        {{ operator.name }}: Средний рейтинг {{ operator.avg_rating ? operator.avg_rating.toFixed(2) : 'N/A' }}, Споры: {{ operator.dispute_count }}
-                    </li>
-                </ul>
-                <h3>Рекомендации</h3>
-                <ul>
-                    <li v-for="rec in recommendations">
-                        {{ rec.message }}
-                    </li>
-                </ul>
-            </div>
-        </main>
-    </div>
-    <script>
-    new Vue({
-        el: '#app',
-        data: {
-            currentLang: 'uz_lat',
-            services: {{ services | tojson }},
-            operators: {{ operators | tojson }},
-            viewType: 'service',
-            serviceId: '',
-            operatorId: '',
-            timeFilter: 'daily',
-            startDate: '',
-            endDate: '',
-            tableData: [],
-            chartData: [],
-            problemServices: [],
-            problemOperators: [],
-            recommendations: [],
-            chart: null
-        },
-        methods: {
-            changeLang(lang) {
-                this.currentLang = lang;
-                // Добавить логику переключения языка
-            },
-            toggleTheme() {
-                document.body.classList.toggle('dark-theme');
-            },
-            fetchData() {
-                if (this.viewType === 'operator_individual' && (!this.operatorId || !this.serviceId)) {
-                    alert('Выберите оператора и услугу для индивидуальной статистики');
-                    return;
-                }
-                const params = new URLSearchParams({
-                    view_type: this.viewType,
-                    time_filter: this.timeFilter,
-                    ...(this.serviceId && { service_id: this.serviceId }),
-                    ...(this.operatorId && { operator_id: this.operatorId }),
-                    ...(this.timeFilter === 'custom' && { start_date: this.startDate, end_date: this.endDate })
-                });
-                axios.get(`/api/admin/statistics/data?${params}`)
-                    .then(response => {
-                        this.tableData = response.data.table_data;
-                        this.chartData = response.data.chart_data;
-                        this.updateChart();
-                    });
-                axios.get('/api/admin/recommendations')
-                    .then(response => {
-                        this.problemServices = response.data.problem_services;
-                        this.problemOperators = response.data.problem_operators;
-                        this.recommendations = response.data.recommendations;
-                    });
-            },
-            updateChart() {
-                const ctx = document.getElementById('statsChart').getContext('2d');
-                if (this.chart) this.chart.destroy();
-                this.chart = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: this.chartData.map(item => item.time_period),
-                        datasets: [
-                            {
-                                label: 'Количество талонов',
-                                data: this.chartData.map(item => item.ticket_count),
-                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                                borderColor: 'rgba(54, 162, 235, 1)',
-                                borderWidth: 1
-                            },
-                            {
-                                label: 'Среднее время обслуживания (мин)',
-                                data: this.chartData.map(item => item.avg_service_time ? item.avg_service_time.toFixed(2) : 0),
-                                backgroundColor: 'rgba(255, 99, 132, 0.6)',
-                                borderColor: 'rgba(255, 99, 132, 1)',
-                                borderWidth: 1
-                            }
-                        ]
-                    },
-                    options: {
-                        scales: {
-                            y: { beginAtZero: true }
-                        },
-                        plugins: {
-                            legend: { display: true }
-                        }
-                    }
-                });
-            },
-            exportData() {
-                const params = new URLSearchParams({
-                    view_type: this.viewType,
-                    time_filter: this.timeFilter,
-                    ...(this.serviceId && { service_id: this.serviceId }),
-                    ...(this.operatorId && { operator_id: this.operatorId }),
-                    ...(this.timeFilter === 'custom' && { start_date: this.startDate, end_date: this.endDate })
-                });
-                window.location.href = `/api/admin/statistics/export?${params}`;
-            }
-        },
-        mounted() {
-            this.fetchData();
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статистика</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom CSS for theme variables and basic styles */
+        :root {
+            --bg: #f4f7fa;
+            --text: #2d3748;
+            --card-bg: #ffffff;
+            --primary: #1a73e8;
+            --secondary: #34c759;
+            --danger: #e53e3e;
+            --border-color: #e2e8f0;
         }
-    });
+        body.dark {
+            --bg: #1a202c;
+            --text: #e2e8f0;
+            --card-bg: #2d3748;
+            --primary: #63b3ed;
+            --secondary: #68d391;
+            --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .container {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 1200px; /* Increased max-width for statistics */
+            margin: 0 auto;
+            transition: background-color 0.3s ease;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary); /* Darker shade on hover */
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: var(--danger); /* Darker shade on hover */
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: var(--secondary); /* Darker shade on hover */
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: var(--bg);
+        }
+        .dark tr:nth-child(even) {
+            background-color: #2d3748;
+        }
+        tr:hover {
+            background-color: #f0f4f8;
+        }
+        .dark tr:hover {
+            background-color: #4a5568;
+        }
+        input[type="date"], select {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            background-color: var(--card-bg);
+            color: var(--text);
+            width: 100%;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            body {
+                padding: 20px;
+            }
+            .container {
+                padding: 1rem;
+            }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .header nav {
+                margin-top: 10px;
+            }
+            .controls {
+                flex-direction: column;
+                align-items: flex-end;
+                top: 10px;
+                right: 10px;
+            }
+            .controls .lang-btn, .controls .theme-toggle {
+                width: auto;
+                margin-bottom: 5px;
+            }
+            .filter-section {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead tr {
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }
+            tr { border: 1px solid var(--border-color); margin-bottom: 0.625rem; }
+            td {
+                border: none;
+                border-bottom: 1px solid var(--border-color);
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            td:before {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+            }
+            /* Specific labels for statistics table */
+            td:nth-of-type(1):before { content: attr(data-label); } /* Date/Operator/Service */
+            td:nth-of-type(2):before { content: attr(data-label); } /* Called Tickets */
+            td:nth-of-type(3):before { content: attr(data-label); } /* Finished Tickets */
+            td:nth-of-type(4):before { content: attr(data-label); } /* Cancelled Tickets */
+            td:nth-of-type(5):before { content: attr(data-label); } /* Redirected Tickets */
+            td:nth-of-type(6):before { content: attr(data-label); } /* Avg Wait Time */
+            td:nth-of-type(7):before { content: attr(data-label); } /* Avg Service Time */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="absolute top-4 right-4 flex space-x-2 controls">
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
+        <div id="language-buttons" class="flex space-x-2">
+            <!-- Language buttons will be loaded here dynamically -->
+        </div>
+    </div>
+
+    <div class="container">
+        <header class="flex justify-between items-center mb-6 flex-wrap">
+            <h1 id="pageTitle" class="text-3xl font-bold mb-2 md:mb-0">Статистика</h1>
+            <nav class="flex space-x-4">
+                <a href="/admin" id="backToAdminButton" class="btn btn-secondary">Назад в админ-панель</a>
+                <a href="/admin_logout" id="logoutButton" class="btn btn-danger">Выход</a>
+            </nav>
+        </header>
+
+        <div class="filter-section mb-6 flex flex-col md:flex-row gap-4">
+            <select id="reportType" class="flex-grow">
+                <option value="daily_summary">Ежедневная сводка</option>
+                <option value="operator_performance">По оператору</option>
+                <option value="service_performance">По услуге</option>
+            </select>
+
+            <input type="date" id="startDate" class="flex-grow">
+            <input type="date" id="endDate" class="flex-grow">
+
+            <select id="operatorFilter" class="flex-grow hidden">
+                <option value="">-- Выберите оператора --</option>
+                <!-- Operators will be loaded here -->
+            </select>
+            <select id="serviceFilter" class="flex-grow hidden">
+                <option value="">-- Выберите услугу --</option>
+                <!-- Services will be loaded here -->
+            </select>
+
+            <button id="applyFiltersButton" class="btn btn-primary">Применить фильтры</button>
+            <button id="exportExcelButton" class="btn btn-secondary">Экспорт в Excel</button>
+        </div>
+
+        <div>
+            <h2 id="statisticsListTitle" class="text-2xl font-semibold mb-4">Данные статистики</h2>
+            <table class="min-w-full">
+                <thead>
+                    <tr id="statisticsTableHeader">
+                        <!-- Table headers will be dynamically loaded -->
+                    </tr>
+                </thead>
+                <tbody id="statisticsTableBody">
+                    <!-- Statistics data will be loaded here -->
+                </tbody>
+            </table>
+            <p id="noDataMessage" class="text-center text-gray-500 dark:text-gray-400 mt-4 hidden">Нет данных для отображения.</p>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = "{{ SERVER_URL }}";
+        let currentLang = localStorage.getItem('language') || 'uz_lat';
+        let translations = {};
+        let allOperators = [];
+        let allServices = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    loadOperatorsForFilter();
+                    loadServicesForFilter();
+                    setupDateInputs();
+                    setupFilters();
+                    fetchStatistics(); // Initial load of daily summary
+                });
+            });
+            setupThemeToggle();
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = ''; // Clear existing buttons
+
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error loading languages:", error);
+                showNotification(`${translations.error_fetch || 'Error loading languages:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+                showNotification(`${translations.error_fetch || 'Error loading translations:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            
+            // Update all translatable elements on this page
+            document.title = translations.statistics_title || 'Статистика';
+            document.getElementById("pageTitle").innerText = translations.statistics_title || 'Статистика';
+            document.getElementById("backToAdminButton").innerText = translations.back_to_admin_panel || 'Назад в админ-панель';
+            document.getElementById("logoutButton").innerText = translations.logout_button || 'Выход';
+            document.getElementById("reportType").querySelector('option[value="daily_summary"]').innerText = translations.report_daily_summary || 'Ежедневная сводка';
+            document.getElementById("reportType").querySelector('option[value="operator_performance"]').innerText = translations.report_operator_performance || 'По оператору';
+            document.getElementById("reportType").querySelector('option[value="service_performance"]').innerText = translations.report_service_performance || 'По услуге';
+            document.getElementById("startDate").placeholder = translations.start_date_placeholder || 'Начальная дата';
+            document.getElementById("endDate").placeholder = translations.end_date_placeholder || 'Конечная дата';
+            document.getElementById("operatorFilter").querySelector('option[value=""]').innerText = translations.select_operator_placeholder || '-- Выберите оператора --';
+            document.getElementById("serviceFilter").querySelector('option[value=""]').innerText = translations.select_service_placeholder || '-- Выберите услугу --';
+            document.getElementById("applyFiltersButton").innerText = translations.apply_filters_button || 'Применить фильтры';
+            document.getElementById("exportExcelButton").innerText = translations.export_excel_button || 'Экспорт в Excel';
+            document.getElementById("statisticsListTitle").innerText = translations.statistics_data_title || 'Данные статистики';
+            document.getElementById("noDataMessage").innerText = translations.no_data_message || 'Нет данных для отображения.';
+
+            // Reload filters and statistics to apply new language
+            loadOperatorsForFilter();
+            loadServicesForFilter();
+            fetchStatistics();
+        }
+
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0; // Default to light if invalid theme in localStorage
+
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes);
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+            applyTheme(themes[currentThemeIndex]);
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function setupDateInputs() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('endDate').value = today;
+            // Set start date to 7 days ago by default
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            document.getElementById('startDate').value = sevenDaysAgo.toISOString().split('T')[0];
+        }
+
+        async function loadOperatorsForFilter() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/operators`);
+                if (!response.ok) throw new Error("Failed to fetch operators");
+                allOperators = await response.json();
+                const operatorFilterSelect = document.getElementById('operatorFilter');
+                operatorFilterSelect.innerHTML = `<option value="">${translations.select_operator_placeholder || '-- Выберите оператора --'}</option>`;
+                allOperators.forEach(op => {
+                    const option = document.createElement('option');
+                    option.value = op.id;
+                    option.innerText = `${op.name} (${op.operator_number})`;
+                    operatorFilterSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error loading operators for filter:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки операторов:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadServicesForFilter() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/services`);
+                if (!response.ok) throw new Error("Failed to fetch services");
+                allServices = await response.json();
+                const serviceFilterSelect = document.getElementById('serviceFilter');
+                serviceFilterSelect.innerHTML = `<option value="">${translations.select_service_placeholder || '-- Выберите услугу --'}</option>`;
+                allServices.forEach(svc => {
+                    const option = document.createElement('option');
+                    option.value = svc.id;
+                    option.innerText = svc.name;
+                    serviceFilterSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error loading services for filter:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки услуг:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setupFilters() {
+            const reportTypeSelect = document.getElementById('reportType');
+            const operatorFilter = document.getElementById('operatorFilter');
+            const serviceFilter = document.getElementById('serviceFilter');
+            const applyFiltersButton = document.getElementById('applyFiltersButton');
+            const exportExcelButton = document.getElementById('exportExcelButton');
+
+            reportTypeSelect.addEventListener('change', () => {
+                // Hide/show filters based on report type
+                if (reportTypeSelect.value === 'operator_performance') {
+                    operatorFilter.classList.remove('hidden');
+                    serviceFilter.classList.add('hidden');
+                } else if (reportTypeSelect.value === 'service_performance') {
+                    operatorFilter.classList.add('hidden');
+                    serviceFilter.classList.remove('hidden');
+                } else { // daily_summary
+                    operatorFilter.classList.add('hidden');
+                    serviceFilter.classList.add('hidden');
+                }
+            });
+
+            applyFiltersButton.addEventListener('click', fetchStatistics);
+            exportExcelButton.addEventListener('click', exportStatistics);
+        }
+
+        async function fetchStatistics() {
+            const reportType = document.getElementById('reportType').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const operatorId = document.getElementById('operatorFilter').value;
+            const serviceId = document.getElementById('serviceFilter').value;
+
+            let apiUrl = `${SERVER_URL}/api/admin/statistics?report_type=${reportType}&start_date=${startDate}&end_date=${endDate}`;
+
+            if (reportType === 'operator_performance' && operatorId) {
+                apiUrl += `&operator_id=${operatorId}`;
+            }
+            if (reportType === 'service_performance' && serviceId) {
+                apiUrl += `&service_id=${serviceId}`;
+            }
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error("Failed to fetch statistics");
+                const data = await response.json();
+                displayStatistics(data, reportType);
+            } catch (error) {
+                console.error("Error fetching statistics:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки статистики:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function displayStatistics(data, reportType) {
+            const tableHeader = document.getElementById('statisticsTableHeader');
+            const tableBody = document.getElementById('statisticsTableBody');
+            const noDataMessage = document.getElementById('noDataMessage');
+
+            tableHeader.innerHTML = '';
+            tableBody.innerHTML = '';
+            noDataMessage.classList.add('hidden');
+
+            if (data.length === 0) {
+                noDataMessage.classList.remove('hidden');
+                return;
+            }
+
+            let headers = [];
+            if (reportType === 'daily_summary') {
+                headers = [
+                    translations.table_date || 'Дата',
+                    translations.table_called_tickets || 'Вызвано талонов',
+                    translations.table_finished_tickets || 'Завершено талонов',
+                    translations.table_cancelled_tickets || 'Отменено талонов',
+                    translations.table_redirected_tickets || 'Перенаправлено талонов',
+                    translations.table_avg_wait_time || 'Среднее время ожидания (мин)',
+                    translations.table_avg_service_time || 'Среднее время обслуживания (мин)'
+                ];
+            } else if (reportType === 'operator_performance') {
+                headers = [
+                    translations.table_operator || 'Оператор',
+                    translations.table_called_tickets || 'Вызвано талонов',
+                    translations.table_finished_tickets || 'Завершено талонов',
+                    translations.table_cancelled_tickets || 'Отменено талонов',
+                    translations.table_redirected_tickets || 'Перенаправлено талонов',
+                    translations.table_avg_wait_time || 'Среднее время ожидания (мин)',
+                    translations.table_avg_service_time || 'Среднее время обслуживания (мин)'
+                ];
+            } else if (reportType === 'service_performance') {
+                headers = [
+                    translations.table_service || 'Услуга',
+                    translations.table_called_tickets || 'Вызвано талонов',
+                    translations.table_finished_tickets || 'Завершено талонов',
+                    translations.table_cancelled_tickets || 'Отменено талонов',
+                    translations.table_redirected_tickets || 'Перенаправлено талонов',
+                    translations.table_avg_wait_time || 'Среднее время ожидания (мин)',
+                    translations.table_avg_service_time || 'Среднее время обслуживания (мин)'
+                ];
+            }
+
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.innerText = headerText;
+                tableHeader.appendChild(th);
+            });
+
+            data.forEach(row => {
+                const tr = tableBody.insertRow();
+                let firstColumnValue = '';
+                if (reportType === 'daily_summary') {
+                    firstColumnValue = row.date;
+                    tr.innerHTML = `
+                        <td data-label="${headers[0]}">${firstColumnValue}</td>
+                        <td data-label="${headers[1]}">${row.called_tickets}</td>
+                        <td data-label="${headers[2]}">${row.finished_tickets}</td>
+                        <td data-label="${headers[3]}">${row.cancelled_tickets}</td>
+                        <td data-label="${headers[4]}">${row.redirected_tickets}</td>
+                        <td data-label="${headers[5]}">${(row.avg_wait_time / 60).toFixed(2)}</td>
+                        <td data-label="${headers[6]}">${(row.avg_service_time / 60).toFixed(2)}</td>
+                    `;
+                } else if (reportType === 'operator_performance') {
+                    const operator = allOperators.find(op => op.id === row.operator_id);
+                    firstColumnValue = operator ? `${operator.name} (${operator.operator_number})` : `ID:${row.operator_id}`;
+                    tr.innerHTML = `
+                        <td data-label="${headers[0]}">${firstColumnValue}</td>
+                        <td data-label="${headers[1]}">${row.called_tickets}</td>
+                        <td data-label="${headers[2]}">${row.finished_tickets}</td>
+                        <td data-label="${headers[3]}">${row.cancelled_tickets}</td>
+                        <td data-label="${headers[4]}">${row.redirected_tickets}</td>
+                        <td data-label="${headers[5]}">${(row.avg_wait_time / 60).toFixed(2)}</td>
+                        <td data-label="${headers[6]}">${(row.avg_service_time / 60).toFixed(2)}</td>
+                    `;
+                } else if (reportType === 'service_performance') {
+                    const service = allServices.find(svc => svc.id === row.service_id);
+                    firstColumnValue = service ? service.name : `ID:${row.service_id}`;
+                    tr.innerHTML = `
+                        <td data-label="${headers[0]}">${firstColumnValue}</td>
+                        <td data-label="${headers[1]}">${row.called_tickets}</td>
+                        <td data-label="${headers[2]}">${row.finished_tickets}</td>
+                        <td data-label="${headers[3]}">${row.cancelled_tickets}</td>
+                        <td data-label="${headers[4]}">${row.redirected_tickets}</td>
+                        <td data-label="${headers[5]}">${(row.avg_wait_time / 60).toFixed(2)}</td>
+                        <td data-label="${headers[6]}">${(row.avg_service_time / 60).toFixed(2)}</td>
+                    `;
+                }
+            });
+        }
+
+        async function exportStatistics() {
+            const reportType = document.getElementById('reportType').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const operatorId = document.getElementById('operatorFilter').value;
+            const serviceId = document.getElementById('serviceFilter').value;
+
+            let apiUrl = `${SERVER_URL}/api/admin/statistics/export?report_type=${reportType}&start_date=${startDate}&end_date=${endDate}`;
+
+            if (reportType === 'operator_performance' && operatorId) {
+                apiUrl += `&operator_id=${operatorId}`;
+            }
+            if (reportType === 'service_performance' && serviceId) {
+                apiUrl += `&service_id=${serviceId}`;
+            }
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error("Failed to export statistics");
+
+                // Get filename from Content-Disposition header
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let filename = 'statistics.xlsx';
+                if (contentDisposition && contentDisposition.indexOf('attachment') !== -1) {
+                    const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1];
+                    }
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename; // Use the filename from the header
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                showNotification(translations.export_success || 'Данные успешно экспортированы!', 'info');
+            } catch (error) {
+                console.error("Error exporting statistics:", error);
+                showNotification(`${translations.error_export || 'Ошибка экспорта данных:'} ${error.message}`, 'danger');
+            }
+        }
+
+        // Initial theme setup (from localStorage)
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("dark");
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
+        }
     </script>
 </body>
 </html>

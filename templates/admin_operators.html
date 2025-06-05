@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление операторами</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f4f7fa;
+            --text: #2d3748;
+            --card-bg: #ffffff;
+            --primary: #1a73e8;
+            --secondary: #34c759;
+            --danger: #e53e3e;
+            --border-color: #e2e8f0;
+        }
+        body.dark {
+            --bg: #1a202c;
+            --text: #e2e8f0;
+            --card-bg: #2d3748;
+            --primary: #63b3ed;
+            --secondary: #68d391;
+            --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .container {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            transition: background-color 0.3s ease;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary);
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: var(--danger);
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: var(--secondary);
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: var(--bg);
+        }
+        .dark tr:nth-child(even) {
+            background-color: #2d3748;
+        }
+        tr:hover {
+            background-color: #f0f4f8;
+        }
+        .dark tr:hover {
+            background-color: #4a5568;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .action-buttons .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        input[type="text"], input[type="number"], input[type="password"], select {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            background-color: var(--card-bg);
+            color: var(--text);
+            width: 100%;
+        }
+        @media (max-width: 768px) {
+            body { padding: 20px; }
+            .container { padding: 1rem; }
+            .header { flex-direction: column; align-items: flex-start; }
+            .header nav { margin-top: 10px; }
+            .controls { flex-direction: column; align-items: flex-end; top: 10px; right: 10px; }
+            .controls .lang-btn, .controls .theme-toggle { width: auto; margin-bottom: 5px; }
+            table, thead, tbody, th, td, tr { display: block; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; }
+            tr { border: 1px solid var(--border-color); margin-bottom: 0.625rem; }
+            td {
+                border: none;
+                border-bottom: 1px solid var(--border-color);
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            td:before {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+            }
+            td:nth-of-type(1):before { content: attr(data-label); }
+            td:nth-of-type(2):before { content: attr(data-label); }
+            td:nth-of-type(3):before { content: attr(data-label); }
+            td:nth-of-type(4):before { content: attr(data-label); }
+            td:nth-of-type(5):before { content: attr(data-label); }
+            .action-buttons { justify-content: flex-end; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="absolute top-4 right-4 flex space-x-2 controls">
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
+        <div id="language-buttons" class="flex space-x-2"></div>
+    </div>
+    <div class="container">
+        <header class="flex justify-between items-center mb-6 flex-wrap">
+            <h1 id="pageTitle" class="text-3xl font-bold mb-2 md:mb-0">Управление операторами</h1>
+            <nav class="flex space-x-4">
+                <a href="/admin" id="backToAdminButton" class="btn btn-secondary">Назад в админ-панель</a>
+                <a href="/admin_logout" id="logoutButton" class="btn btn-danger">Выход</a>
+            </nav>
+        </header>
+        <div class="mb-6">
+            <h2 id="addOperatorTitle" class="text-2xl font-semibold mb-4">Добавить нового оператора</h2>
+            <div class="flex flex-col md:flex-row gap-4 mb-4">
+                <input type="text" id="operatorName" placeholder="Имя оператора" class="flex-grow">
+                <input type="text" id="operatorNumber" placeholder="Номер оператора" class="flex-grow">
+            </div>
+            <div class="flex flex-col md:flex-row gap-4 mb-4">
+                <input type="password" id="operatorPassword" placeholder="Пароль" class="flex-grow">
+                <input type="text" id="telegramChatId" placeholder="Telegram Chat ID (опционально)" class="flex-grow">
+            </div>
+            <div class="mb-4">
+                <label id="assignedServicesLabel" class="block text-sm font-medium mb-2">Назначенные услуги:</label>
+                <div id="servicesCheckboxes" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2"></div>
+            </div>
+            <button id="addOperatorButton" class="btn btn-primary">Добавить</button>
+        </div>
+        <div>
+            <h2 id="operatorListTitle" class="text-2xl font-semibold mb-4">Список операторов</h2>
+            <table class="min-w-full">
+                <thead>
+                    <tr>
+                        <th id="operatorNameHeader">Имя</th>
+                        <th id="operatorNumberHeader">Номер оператора</th>
+                        <th id="operatorTelegramIdHeader">Telegram ID</th>
+                        <th id="operatorServicesHeader">Услуги</th>
+                        <th id="operatorActionsHeader">Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="operatorTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const SERVER_URL = "{{ SERVER_URL }}";
+        let currentLang = localStorage.getItem('language') || 'uz_lat';
+        let translations = {};
+        let allServices = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    loadAllServices().then(() => {
+                        loadOperators();
+                    });
+                });
+            });
+            setupThemeToggle();
+            setupAddOperator();
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = '';
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Error loading languages:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                translations = await response.json();
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Error loading translations:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            document.title = translations.operator_management || 'Управление операторами';
+            document.getElementById("pageTitle").innerText = translations.operator_management || 'Управление операторами';
+            document.getElementById("backToAdminButton").innerText = translations.back_to_admin_panel || 'Назад в админ-панель';
+            document.getElementById("logoutButton").innerText = translations.logout_button || 'Выход';
+            document.getElementById("addOperatorTitle").innerText = translations.add_new_operator || 'Добавить нового оператора';
+            document.getElementById("operatorName").placeholder = translations.operator_name_placeholder || 'Имя оператора';
+            document.getElementById("operatorNumber").placeholder = translations.operator_number_placeholder || 'Номер оператора';
+            document.getElementById("operatorPassword").placeholder = translations.password_placeholder || 'Пароль';
+            document.getElementById("telegramChatId").placeholder = translations.telegram_chat_id_optional_placeholder || 'Telegram Chat ID (опционально)';
+            document.getElementById("assignedServicesLabel").innerText = translations.assigned_services_label || 'Назначенные услуги:';
+            document.getElementById("addOperatorButton").innerText = translations.add_button || 'Добавить';
+            document.getElementById("operatorListTitle").innerText = translations.operator_list_title || 'Список операторов';
+            document.getElementById("operatorNameHeader").innerText = translations.table_name || 'Имя';
+            document.getElementById("operatorNumberHeader").innerText = translations.table_operator_number || 'Номер оператора';
+            document.getElementById("operatorTelegramIdHeader").innerText = translations.table_telegram_id || 'Telegram ID';
+            document.getElementById("operatorServicesHeader").innerText = translations.table_services || 'Услуги';
+            document.getElementById("operatorActionsHeader").innerText = translations.table_actions || 'Действия';
+            loadAllServices();
+            loadOperators();
+        }
+
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0;
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes);
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+            applyTheme(themes[currentThemeIndex]);
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        async function loadAllServices() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/services`);
+                if (!response.ok) throw new Error("Failed to fetch services for checkboxes");
+                allServices = await response.json();
+                renderServicesCheckboxes();
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки услуг для чекбоксов:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function renderServicesCheckboxes(selectedServiceIds = []) {
+            const servicesCheckboxesContainer = document.getElementById('servicesCheckboxes');
+            servicesCheckboxesContainer.innerHTML = '';
+            allServices.forEach(service => {
+                const checkboxDiv = document.createElement('div');
+                checkboxDiv.className = "flex items-center";
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `service_${service.id}`;
+                checkbox.value = service.id;
+                checkbox.className = "mr-2 rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-600 dark:border-gray-500";
+                if (selectedServiceIds.includes(service.id)) {
+                    checkbox.checked = true;
+                }
+                const label = document.createElement('label');
+                label.htmlFor = `service_${service.id}`;
+                label.className = "text-gray-700 dark:text-gray-300";
+                label.innerText = service.name;
+                checkboxDiv.appendChild(checkbox);
+                checkboxDiv.appendChild(label);
+                servicesCheckboxesContainer.appendChild(checkboxDiv);
+            });
+        }
+
+        async function loadOperators() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/operators`);
+                if (!response.ok) throw new Error("Failed to fetch operators");
+                const operators = await response.json();
+                const tableBody = document.getElementById('operatorTableBody');
+                tableBody.innerHTML = '';
+                operators.forEach(operator => {
+                    const assignedServiceNames = operator.assigned_services.map(serviceId => {
+                        const service = allServices.find(s => s.id === serviceId);
+                        return service ? service.name : `ID:${serviceId}`;
+                    }).join(', ');
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td data-label="${translations.table_name || 'Имя'}">${operator.name}</td>
+                        <td data-label="${translations.table_operator_number || 'Номер оператора'}">${operator.operator_number}</td>
+                        <td data-label="${translations.table_telegram_id || 'Telegram ID'}">${operator.telegram_chat_id || 'N/A'}</td>
+                        <td data-label="${translations.table_services || 'Услуги'}">${assignedServiceNames || 'N/A'}</td>
+                        <td data-label="${translations.table_actions || 'Действия'}" class="action-buttons">
+                            <button class="btn btn-primary edit-btn"
+                                data-id="${operator.id}"
+                                data-name="${operator.name}"
+                                data-operator-number="${operator.operator_number}"
+                                data-telegram-chat-id="${operator.telegram_chat_id || ''}"
+                                data-assigned-services="${JSON.stringify(operator.assigned_services)}">
+                                ${translations.edit_button || 'Редактировать'}
+                            </button>
+                            <button class="btn btn-danger delete-btn" data-id="${operator.id}">${translations.delete_button || 'Удалить'}</button>
+                        </td>
+                    `;
+                });
+                attachOperatorEventListeners();
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки операторов:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function attachOperatorEventListeners() {
+            document.querySelectorAll('.edit-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const { id, name, operatorNumber, telegramChatId, assignedServices } = event.target.dataset;
+                    editOperator(id, name, operatorNumber, telegramChatId, JSON.parse(assignedServices));
+                };
+            });
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const id = event.target.dataset.id;
+                    deleteOperator(id);
+                };
+            });
+        }
+
+        function setupAddOperator() {
+            document.getElementById('addOperatorButton').addEventListener('click', addOperator);
+            document.getElementById('operatorName').addEventListener('keypress', (e) => { if (e.key === 'Enter') addOperator(); });
+            document.getElementById('operatorNumber').addEventListener('keypress', (e) => { if (e.key === 'Enter') addOperator(); });
+            document.getElementById('operatorPassword').addEventListener('keypress', (e) => { if (e.key === 'Enter') addOperator(); });
+            document.getElementById('telegramChatId').addEventListener('keypress', (e) => { if (e.key === 'Enter') addOperator(); });
+        }
+
+        async function addOperator() {
+            const name = document.getElementById('operatorName').value.trim();
+            const operator_number = document.getElementById('operatorNumber').value.trim();
+            const password = document.getElementById('operatorPassword').value;
+            const telegram_chat_id = document.getElementById('telegramChatId').value.trim();
+            const assigned_services = Array.from(document.querySelectorAll('#servicesCheckboxes input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
+            if (!name || !operator_number || !password) {
+                showNotification(translations.empty_operator_fields || 'Имя, номер оператора и пароль не могут быть пустыми.', 'danger');
+                return;
+            }
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/operators`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, operator_number, password, telegram_chat_id: telegram_chat_id || null, assigned_services })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.message || translations.operator_added_success || 'Оператор успешно добавлен.', 'info');
+                    document.getElementById('operatorName').value = '';
+                    document.getElementById('operatorNumber').value = '';
+                    document.getElementById('operatorPassword').value = '';
+                    document.getElementById('telegramChatId').value = '';
+                    document.querySelectorAll('#servicesCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+                    loadOperators();
+                } else {
+                    showNotification(data.error || translations.error_adding_operator || 'Ошибка добавления оператора.', 'danger');
+                }
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function editOperator(id, currentName, currentOperatorNumber, currentTelegramChatId, currentAssignedServices) {
+            const modal = document.createElement('div');
+            modal.className = "fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50";
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+                    <h3 class="text-2xl font-bold mb-4">${translations.edit_operator || 'Редактировать оператора'}</h3>
+                    <div class="mb-4">
+                        <label for="editOperatorName" class="block text-sm font-medium mb-1">${translations.operator_name_placeholder || 'Имя оператора'}:</label>
+                        <input type="text" id="editOperatorName" value="${currentName}" class="w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
+                    <div class="mb-4">
+                        <label for="editOperatorNumber" class="block text-sm font-medium mb-1">${translations.operator_number_placeholder || 'Номер оператора'}:</label>
+                        <input type="text" id="editOperatorNumber" value="${currentOperatorNumber}" class="w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
+                    <div class="mb-4">
+                        <label for="editTelegramChatId" class="block text-sm font-medium mb-1">${translations.telegram_chat_id_optional_placeholder || 'Telegram Chat ID (опционально)'}:</label>
+                        <input type="text" id="editTelegramChatId" value="${currentTelegramChatId}" class="w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
+                    <div class="mb-4">
+                        <label for="editAssignedServices" class="block text-sm font-medium mb-1">${translations.assigned_services_label || 'Назначенные услуги:'}</label>
+                        <div id="editServicesCheckboxes" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border p-2 rounded-md bg-gray-50 dark:bg-gray-700"></div>
+                    </div>
+                    <div class="flex justify-end space-x-4">
+                        <button id="cancelEditButton" class="btn btn-secondary">${translations.cancel_button || 'Отмена'}</button>
+                        <button id="saveEditButton" class="btn btn-primary">${translations.save_button || 'Сохранить'}</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const editServicesCheckboxesContainer = document.getElementById('editServicesCheckboxes');
+            editServicesCheckboxesContainer.innerHTML = '';
+            allServices.forEach(service => {
+                const checkboxDiv = document.createElement('div');
+                checkboxDiv.className = "flex items-center";
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `edit_service_${service.id}`;
+                checkbox.value = service.id;
+                checkbox.className = "mr-2 rounded text-blue-600 focus:ring-blue-500 dark:bg-gray-600 dark:border-gray-500";
+                if (currentAssignedServices.includes(service.id)) {
+                    checkbox.checked = true;
+                }
+                const label = document.createElement('label');
+                label.htmlFor = `edit_service_${service.id}`;
+                label.className = "text-gray-700 dark:text-gray-300";
+                label.innerText = service.name;
+                checkboxDiv.appendChild(checkbox);
+                checkboxDiv.appendChild(label);
+                editServicesCheckboxesContainer.appendChild(checkboxDiv);
+            });
+            document.getElementById('cancelEditButton').onclick = () => modal.remove();
+            document.getElementById('saveEditButton').onclick = async () => {
+                const updatedName = document.getElementById('editOperatorName').value.trim();
+                const updatedOperatorNumber = document.getElementById('editOperatorNumber').value.trim();
+                const updatedTelegramChatId = document.getElementById('editTelegramChatId').value.trim();
+                const updatedAssignedServices = Array.from(document.querySelectorAll('#editServicesCheckboxes input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
+                if (!updatedName || !updatedOperatorNumber) {
+                    showNotification(translations.empty_operator_fields || 'Имя и номер оператора не могут быть пустыми.', 'danger');
+                    return;
+                }
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/admin/operators/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: updatedName,
+                            operator_number: updatedOperatorNumber,
+                            telegram_chat_id: updatedTelegramChatId || null,
+                            assigned_services: updatedAssignedServices
+                        })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showNotification(data.message || translations.operator_updated_success || 'Оператор успешно обновлен.', 'info');
+                        modal.remove();
+                        loadOperators();
+                    } else {
+                        showNotification(data.error || translations.error_updating_operator || 'Ошибка обновления оператора.', 'danger');
+                    }
+                } catch (error) {
+                    showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+                }
+            };
+        }
+
+        function deleteOperator(id) {
+            if (!confirm(translations.confirm_delete_operator || 'Вы уверены, что хотите удалить этого оператора?')) {
+                return;
+            }
+            fetch(`${SERVER_URL}/api/admin/operators/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    showNotification(body.message || translations.operator_deleted_success || 'Оператор успешно удален.', 'info');
+                    loadOperators();
+                } else {
+                    showNotification(body.error || translations.error_deleting_operator || 'Ошибка удаления оператора.', 'danger');
+                }
+            })
+            .catch(error => {
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            });
+        }
+
+        // Initial theme setup (from localStorage)
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("dark");
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
+        }
+    </script>
+</body>
+</html>

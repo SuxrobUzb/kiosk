@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление вебхуками</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom CSS for theme variables and basic styles */
+        :root {
+            --bg: #f4f7fa;
+            --text: #2d3748;
+            --card-bg: #ffffff;
+            --primary: #1a73e8;
+            --secondary: #34c759;
+            --danger: #e53e3e;
+            --border-color: #e2e8f0;
+        }
+        body.dark {
+            --bg: #1a202c;
+            --text: #e2e8f0;
+            --card-bg: #2d3748;
+            --primary: #63b3ed;
+            --secondary: #68d391;
+            --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .container {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            transition: background-color 0.3s ease;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary); /* Darker shade on hover */
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: var(--danger); /* Darker shade on hover */
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: var(--secondary); /* Darker shade on hover */
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: var(--bg);
+        }
+        .dark tr:nth-child(even) {
+            background-color: #2d3748;
+        }
+        tr:hover {
+            background-color: #f0f4f8;
+        }
+        .dark tr:hover {
+            background-color: #4a5568;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .action-buttons .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        input[type="text"], input[type="url"], select {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            background-color: var(--card-bg);
+            color: var(--text);
+            width: 100%;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            body {
+                padding: 20px;
+            }
+            .container {
+                padding: 1rem;
+            }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .header nav {
+                margin-top: 10px;
+            }
+            .controls {
+                flex-direction: column;
+                align-items: flex-end;
+                top: 10px;
+                right: 10px;
+            }
+            .controls .lang-btn, .controls .theme-toggle {
+                width: auto;
+                margin-bottom: 5px;
+            }
+            table, thead, tbody, th, td, tr {
+                display: block;
+            }
+            thead tr {
+                position: absolute;
+                top: -9999px;
+                left: -9999px;
+            }
+            tr { border: 1px solid var(--border-color); margin-bottom: 0.625rem; }
+            td {
+                border: none;
+                border-bottom: 1px solid var(--border-color);
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            td:before {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+            }
+            td:nth-of-type(1):before { content: attr(data-label); } /* Event Type */
+            td:nth-of-type(2):before { content: attr(data-label); } /* URL */
+            td:nth-of-type(3):before { content: attr(data-label); } /* Actions */
+            .action-buttons {
+                justify-content: flex-end;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="absolute top-4 right-4 flex space-x-2 controls">
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
+        <div id="language-buttons" class="flex space-x-2">
+            <!-- Language buttons will be loaded here dynamically -->
+        </div>
+    </div>
+
+    <div class="container">
+        <header class="flex justify-between items-center mb-6 flex-wrap">
+            <h1 id="pageTitle" class="text-3xl font-bold mb-2 md:mb-0">Управление вебхуками</h1>
+            <nav class="flex space-x-4">
+                <a href="/admin" id="backToAdminButton" class="btn btn-secondary">Назад в админ-панель</a>
+                <a href="/admin_logout" id="logoutButton" class="btn btn-danger">Выход</a>
+            </nav>
+        </header>
+
+        <div class="mb-6">
+            <h2 id="addWebhookTitle" class="text-2xl font-semibold mb-4">Добавить новый вебхук</h2>
+            <div class="flex flex-col md:flex-row gap-4 mb-4">
+                <select id="webhookEventType" class="flex-grow">
+                    <option value="">-- Выберите тип события --</option>
+                    <option value="ticket_called">Талон вызван</option>
+                    <option value="ticket_finished">Талон завершен</option>
+                    <option value="ticket_cancelled">Талон отменен</option>
+                    <option value="ticket_redirected">Талон перенаправлен</option>
+                    <option value="new_ticket">Новый талон создан</option>
+                </select>
+                <input type="url" id="webhookUrl" placeholder="URL вебхука" class="flex-grow">
+            </div>
+            <button id="addWebhookButton" class="btn btn-primary">Добавить</button>
+        </div>
+
+        <div>
+            <h2 id="webhookListTitle" class="text-2xl font-semibold mb-4">Список вебхуков</h2>
+            <table class="min-w-full">
+                <thead>
+                    <tr>
+                        <th id="webhookEventTypeHeader">Тип события</th>
+                        <th id="webhookUrlHeader">URL</th>
+                        <th id="webhookActionsHeader">Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="webhookTableBody">
+                    <!-- Webhooks will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const SERVER_URL = "{{ SERVER_URL }}";
+        let currentLang = localStorage.getItem('language') || 'uz_lat';
+        let translations = {};
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    loadWebhooks();
+                });
+            });
+            setupThemeToggle();
+            setupAddWebhook();
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = ''; // Clear existing buttons
+
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error loading languages:", error);
+                showNotification(`${translations.error_fetch || 'Error loading languages:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+                showNotification(`${translations.error_fetch || 'Error loading translations:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            
+            // Update all translatable elements on this page
+            document.title = translations.webhook_management || 'Управление вебхуками';
+            document.getElementById("pageTitle").innerText = translations.webhook_management || 'Управление вебхуками';
+            document.getElementById("backToAdminButton").innerText = translations.back_to_admin_panel || 'Назад в админ-панель';
+            document.getElementById("logoutButton").innerText = translations.logout_button || 'Выход';
+            document.getElementById("addWebhookTitle").innerText = translations.add_new_webhook || 'Добавить новый вебхук';
+            document.getElementById("webhookEventType").querySelector('option[value=""]').innerText = translations.select_event_type_placeholder || '-- Выберите тип события --';
+            document.getElementById("webhookEventType").querySelector('option[value="ticket_called"]').innerText = translations.event_ticket_called || 'Талон вызван';
+            document.getElementById("webhookEventType").querySelector('option[value="ticket_finished"]').innerText = translations.event_ticket_finished || 'Талон завершен';
+            document.getElementById("webhookEventType").querySelector('option[value="ticket_cancelled"]').innerText = translations.event_ticket_cancelled || 'Талон отменен';
+            document.getElementById("webhookEventType").querySelector('option[value="ticket_redirected"]').innerText = translations.event_ticket_redirected || 'Талон перенаправлен';
+            document.getElementById("webhookEventType").querySelector('option[value="new_ticket"]').innerText = translations.event_new_ticket || 'Новый талон создан';
+            document.getElementById("webhookUrl").placeholder = translations.webhook_url_placeholder || 'URL вебхука';
+            document.getElementById("addWebhookButton").innerText = translations.add_button || 'Добавить';
+            document.getElementById("webhookListTitle").innerText = translations.webhook_list_title || 'Список вебхуков';
+            document.getElementById("webhookEventTypeHeader").innerText = translations.table_event_type || 'Тип события';
+            document.getElementById("webhookUrlHeader").innerText = translations.table_url || 'URL';
+            document.getElementById("webhookActionsHeader").innerText = translations.table_actions || 'Действия';
+
+            loadWebhooks(); // Reload webhooks list to apply new language to dynamic content
+        }
+
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0; // Default to light if invalid theme in localStorage
+
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes);
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+            applyTheme(themes[currentThemeIndex]);
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        async function loadWebhooks() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/webhooks`);
+                if (!response.ok) throw new Error("Failed to fetch webhooks");
+                const webhooks = await response.json();
+                const tableBody = document.getElementById('webhookTableBody');
+                tableBody.innerHTML = '';
+                webhooks.forEach(webhook => {
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td data-label="${translations.table_event_type || 'Тип события'}">${translations[`event_${webhook.event_type}`] || webhook.event_type}</td>
+                        <td data-label="${translations.table_url || 'URL'}">${webhook.url}</td>
+                        <td data-label="${translations.table_actions || 'Действия'}" class="action-buttons">
+                            <button class="btn btn-primary edit-btn"
+                                data-id="${webhook.id}"
+                                data-event-type="${webhook.event_type}"
+                                data-url="${webhook.url}">
+                                ${translations.edit_button || 'Редактировать'}
+                            </button>
+                            <button class="btn btn-danger delete-btn" data-id="${webhook.id}">${translations.delete_button || 'Удалить'}</button>
+                        </td>
+                    `;
+                });
+                attachWebhookEventListeners();
+            } catch (error) {
+                console.error("Error loading webhooks:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки вебхуков:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function attachWebhookEventListeners() {
+            document.querySelectorAll('.edit-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const { id, eventType, url } = event.target.dataset;
+                    editWebhook(id, eventType, url);
+                };
+            });
+
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const id = event.target.dataset.id;
+                    deleteWebhook(id);
+                };
+            });
+        }
+
+        function setupAddWebhook() {
+            document.getElementById('addWebhookButton').addEventListener('click', addWebhook);
+            document.getElementById('webhookUrl').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addWebhook();
+                }
+            });
+        }
+
+        async function addWebhook() {
+            const event_type = document.getElementById('webhookEventType').value;
+            const url = document.getElementById('webhookUrl').value.trim();
+
+            if (!event_type || !url) {
+                showNotification(translations.empty_webhook_fields || 'Пожалуйста, выберите тип события и введите URL.', 'danger');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/webhooks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event_type, url })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.message || translations.webhook_added_success || 'Вебхук успешно добавлен.', 'info');
+                    document.getElementById('webhookEventType').value = '';
+                    document.getElementById('webhookUrl').value = '';
+                    loadWebhooks();
+                } else {
+                    showNotification(data.error || translations.error_adding_webhook || 'Ошибка добавления вебхука.', 'danger');
+                }
+            } catch (error) {
+                console.error("Error adding webhook:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function editWebhook(id, currentEventType, currentUrl) {
+            const modal = document.createElement('div');
+            modal.className = "fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50";
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+                    <h3 class="text-2xl font-bold mb-4">${translations.edit_webhook || 'Редактировать вебхук'}</h3>
+                    <div class="mb-4">
+                        <label for="editWebhookEventType" class="block text-sm font-medium mb-1">${translations.table_event_type || 'Тип события'}:</label>
+                        <select id="editWebhookEventType" class="w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100" readonly>
+                            <option value="ticket_called">${translations.event_ticket_called || 'Талон вызван'}</option>
+                            <option value="ticket_finished">${translations.event_ticket_finished || 'Талон завершен'}</option>
+                            <option value="ticket_cancelled">${translations.event_ticket_cancelled || 'Талон отменен'}</option>
+                            <option value="ticket_redirected">${translations.event_ticket_redirected || 'Талон перенаправлен'}</option>
+                            <option value="new_ticket">${translations.event_new_ticket || 'Новый талон создан'}</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label for="editWebhookUrl" class="block text-sm font-medium mb-1">${translations.webhook_url_placeholder || 'URL вебхука'}:</label>
+                        <input type="url" id="editWebhookUrl" value="${currentUrl}" class="w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
+                    <div class="flex justify-end space-x-4">
+                        <button id="cancelEditButton" class="btn btn-secondary">${translations.cancel_button || 'Отмена'}</button>
+                        <button id="saveEditButton" class="btn btn-primary">${translations.save_button || 'Сохранить'}</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            document.getElementById('editWebhookEventType').value = currentEventType;
+            document.getElementById('editWebhookEventType').setAttribute('disabled', 'true'); // Event type is not editable
+
+            document.getElementById('cancelEditButton').onclick = () => modal.remove();
+            document.getElementById('saveEditButton').onclick = async () => {
+                const updatedUrl = document.getElementById('editWebhookUrl').value.trim();
+                if (!updatedUrl) {
+                    showNotification(translations.empty_webhook_url || 'URL вебхука не может быть пустым.', 'danger');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/admin/webhooks/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: updatedUrl })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showNotification(data.message || translations.webhook_updated_success || 'Вебхук успешно обновлен.', 'info');
+                        modal.remove();
+                        loadWebhooks();
+                    } else {
+                        showNotification(data.error || translations.error_updating_webhook || 'Ошибка обновления вебхука.', 'danger');
+                    }
+                } catch (error) {
+                    console.error("Error updating webhook:", error);
+                    showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+                }
+            };
+        }
+
+        function deleteWebhook(id) {
+            if (!confirm(translations.confirm_delete_webhook || 'Вы уверены, что хотите удалить этот вебхук?')) {
+                return;
+            }
+
+            fetch(`${SERVER_URL}/api/admin/webhooks/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    showNotification(body.message || translations.webhook_deleted_success || 'Вебхук успешно удален.', 'info');
+                    loadWebhooks();
+                } else {
+                    showNotification(body.error || translations.error_deleting_webhook || 'Ошибка удаления вебхука.', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error("Error deleting webhook:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            });
+        }
+
+        // Initial theme setup (from localStorage)
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("dark");
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
+        }
+    </script>
+</body>
+</html>

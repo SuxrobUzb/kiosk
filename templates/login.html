@@ -1,57 +1,241 @@
-<!-- templates/login.html -->
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Login</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operator Login</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
+        /* Custom CSS for theme variables and basic styles */
+        :root {
+            --bg: #f4f7fa;
+            --text: #2d3748;
+            --card-bg: #ffffff;
+            --primary: #1a73e8;
+            --secondary: #34c759;
+            --danger: #e53e3e;
+            --border-color: #e2e8f0;
+        }
+        body.dark {
+            --bg: #1a202c;
+            --text: #e2e8f0;
+            --card-bg: #2d3748;
+            --primary: #63b3ed;
+            --secondary: #68d391;
+            --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
+        }
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            background: #f4f7fa;
-            margin: 0;
+            padding: 1rem; /* Responsive padding */
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
-        .login-container {
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            width: 300px;
-            text-align: center;
+        /* Notification styles */
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
         }
-        input {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
         }
-        button {
-            width: 100%;
-            padding: 10px;
-            background: #1a73e8;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover { background: #1666c5; }
-        .error { color: red; margin-top: 10px; }
     </style>
 </head>
-<body>
-    <div class="login-container">
-        <h2>Operator Login</h2>
-        <form method="POST" action="http://172.16.1.28:5000/login">
-            <input type="text" name="operator_id" placeholder="Operator ID" required>
-            <input type="password" name="password" placeholder="Parol" required>
-            <button type="submit">Login</button>
-        </form>
-        {% if error %}
-            <p class="error">{{ error }}</p>
-        {% endif %}
+<body class="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    <div class="absolute top-4 right-4 flex space-x-2">
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
+        <div id="language-buttons" class="flex space-x-2">
+            <!-- Language buttons will be loaded here dynamically -->
+        </div>
     </div>
+
+    <div class="login-container bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-sm text-center transition-colors duration-300">
+        <h2 id="loginTitle" class="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">Operator Login</h2>
+        <form id="loginForm" method="POST" action="">
+            <input type="text" id="username" name="username" placeholder="Username" required
+                   class="w-full p-3 mb-4 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input type="password" id="password" name="password" placeholder="Password" required
+                   class="w-full p-3 mb-6 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button type="submit" id="loginButton"
+                    class="w-full p-3 bg-blue-600 text-white font-semibold rounded-md shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-all duration-200 transform hover:scale-105">
+                Login
+            </button>
+            <p id="error" class="text-red-500 mt-4 text-sm"></p>
+            <a href="{{ SERVER_URL }}/forgot_password" id="forgotPasswordLink" class="text-blue-600 dark:text-blue-400 hover:underline mt-4 block">
+                Forgot password?
+            </a>
+        </form>
+    </div>
+
+    <script>
+        // SERVER_URL is passed from Flask context
+        const SERVER_URL = "{{ SERVER_URL }}";
+        let currentLang = localStorage.getItem('language') || 'uz_lat';
+        let translations = {};
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => { // Load languages first
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                });
+            });
+            setupThemeToggle();
+            setupLoginForm();
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = ''; // Clear existing buttons
+
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error loading languages:", error);
+                showNotification(`${translations.error_fetch || 'Error loading languages:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+                showNotification(`${translations.error_fetch || 'Error loading translations:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            
+            // Update translatable elements
+            document.getElementById("loginTitle").innerText = translations.operator_login || 'Operator Login';
+            document.getElementById("username").placeholder = translations.username_placeholder || 'Username';
+            document.getElementById("password").placeholder = translations.password_placeholder || 'Password';
+            document.getElementById("loginButton").innerText = translations.login_button || 'Login';
+            document.getElementById("forgotPasswordLink").innerText = translations.forgot_password_title || 'Forgot password?';
+            document.title = translations.operator_login || 'Operator Login'; // Update page title
+        }
+
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0; // Default to light if invalid theme in localStorage
+
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes); // Remove all theme classes
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+
+            // Apply initial theme
+            applyTheme(themes[currentThemeIndex]);
+
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function setupLoginForm() {
+            document.getElementById('loginForm').addEventListener('submit', async function(event) {
+                event.preventDefault();
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                const errorElement = document.getElementById('error');
+                errorElement.innerText = '';
+
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/operator_login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        // Save theme preference from backend to localStorage
+                        localStorage.setItem('theme', data.theme_preference || 'light');
+                        window.location.href = `${SERVER_URL}/operator/${data.operator_id}`;
+                    } else {
+                        errorElement.innerText = data.message || 'Login failed.';
+                        showNotification(data.message || 'Login failed.', 'danger');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    errorElement.innerText = 'Network error. Please try again.';
+                    showNotification('Network error. Please try again.', 'danger');
+                }
+            });
+        }
+    </script>
 </body>
 </html>

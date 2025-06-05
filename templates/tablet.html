@@ -2,25 +2,19 @@
 <html>
 <head>
     <title>Operator Tablet (Планшет)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #f4f7fa;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
+        /* Custom CSS for theme variables and basic styles */
         :root {
             --bg: #f4f7fa;
             --text: #2d3748;
             --card-bg: #ffffff;
             --primary: #1a73e8;
             --secondary: #34c759;
+            --danger: #e53e3e;
+            --border-color: #e2e8f0;
         }
         body.dark {
             --bg: #1a202c;
@@ -28,10 +22,29 @@
             --card-bg: #2d3748;
             --primary: #63b3ed;
             --secondary: #68d391;
+            --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
         }
         body {
+            font-family: 'Inter', sans-serif;
             background: var(--bg);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
             color: var(--text);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         .container {
             background: var(--card-bg);
@@ -41,8 +54,14 @@
             max-width: 800px;
             text-align: center;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease;
         }
-        h1 { font-size: 28px; font-weight: 600; color: var(--primary); margin-bottom: 20px; }
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 20px;
+        }
         #current_ticket {
             font-size: 48px;
             font-weight: 600;
@@ -51,9 +70,15 @@
             border-radius: 12px;
             margin-bottom: 30px;
             color: var(--text);
+            transition: background-color 0.3s ease;
         }
         .dark #current_ticket { background: #4a5568; }
-        .buttons { display: flex; gap: 20px; justify-content: center; }
+        .buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+        }
         button {
             padding: 16px 32px;
             border: none;
@@ -65,16 +90,22 @@
             transition: all 0.2s;
             min-width: 150px;
         }
+        button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
         .call-btn { background: var(--primary); }
-        .call-btn:hover { background: #1666c5; }
+        .call-btn:hover:not(:disabled) { background: #1666c5; transform: translateY(-1px); }
         .finish-btn { background: var(--secondary); }
-        .finish-btn:hover { background: #2fb34e; }
+        .finish-btn:hover:not(:disabled) { background: #2fb34e; transform: translateY(-1px); }
         .controls {
             position: absolute;
             top: 20px;
             right: 20px;
             display: flex;
             gap: 10px;
+            flex-wrap: wrap; /* Allow controls to wrap */
         }
         .lang-btn, .theme-toggle {
             padding: 8px 16px;
@@ -103,163 +134,240 @@
             z-index: 1000;
             transition: opacity 0.3s;
             text-align: center;
+            opacity: 0;
+            animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 </head>
 <body>
     <div class="controls">
-        <button class="lang-btn active" onclick="setLanguage('uz_lat')">Uz (Lat)</button>
-        <button class="lang-btn" onclick="setLanguage('uz_cyr')">Ўз (Кирилл)</button>
-        <button class="lang-btn" onclick="setLanguage('ru')">Ру</button>
-        <button class="lang-btn" onclick="setLanguage('en')">En</button>
-        <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+        <div id="language-buttons" class="flex space-x-2">
+            <!-- Language buttons will be loaded here dynamically -->
+        </div>
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
     </div>
     <div class="container">
-        <h1 id="title">Operator {{ operator_id }}</h1>
-        <div id="current_ticket">{{ translations[currentLang].waiting }}</div>
+        <h1 id="title">Оператор {{ operator_id }}</h1>
+        <div id="current_ticket">Ожидание...</div>
         <div class="buttons">
-            <button class="call-btn" onclick="callTicket()">{{ translations[currentLang].call }}</button>
-            <button class="finish-btn" onclick="finishTicket()">{{ translations[currentLang].finish }}</button>
+            <button class="call-btn" id="callButton">Вызвать</button>
+            <button class="finish-btn" id="finishButton">Завершить</button>
         </div>
     </div>
     <script>
-        const translations = {
-            uz_lat: { 
-                title: "Operator", waiting: "Kutish", call: "Chaqirish", finish: "Tugatish", 
-                error_no_ticket: "Hech qanday taloon chaqirilmagan!", error_fetch: "Xatolik yuz berdi" 
-            },
-            uz_cyr: { 
-                title: "Оператор", waiting: "Кутиш", call: "Чакириш", finish: "Тугатиш", 
-                error_no_ticket: "Ҳеч қандай талон чақирилмаган!", error_fetch: "Хатолик юз берди" 
-            },
-            ru: { 
-                title: "Оператор", waiting: "Ожидание", call: "Вызвать", finish: "Завершить", 
-                error_no_ticket: "Ни один талон не вызван!", error_fetch: "Произошла ошибка" 
-            },
-            en: { 
-                title: "Operator", waiting: "Waiting", call: "Call", finish: "Finish", 
-                error_no_ticket: "No ticket has been called!", error_fetch: "An error occurred" 
-            }
-        };
-        let currentLang = "uz_lat";
-        const serverUrl = "http://172.16.1.28:5000";
-        const socket = io(serverUrl);
-        let currentTicket = null;
+        const SERVER_URL = "{{ SERVER_URL }}";
         const operatorId = {{ operator_id }};
+        let currentLang = localStorage.getItem('language') || 'ru'; // Default to Russian
+        let translations = {};
+        let currentTicket = null;
+
+        const socket = io(SERVER_URL);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    fetchCurrentTicket();
+                });
+            });
+            setupThemeToggle();
+            setupButtons();
+            setInterval(fetchCurrentTicket, 5000); // Refresh current ticket every 5 seconds
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = ''; // Clear existing buttons
+
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error loading languages:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки языков:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки переводов:'} ${error.message}`, 'danger');
+            }
+        }
 
         function setLanguage(lang) {
             currentLang = lang;
-            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active"));
-            document.querySelector(`button[onclick="setLanguage('${lang}')"]`).classList.add("active");
-            document.getElementById("title").innerText = `${translations[lang].title} ${operatorId}`;
-            document.getElementById("current_ticket").innerText = currentTicket ? currentTicket : translations[lang].waiting;
-            document.querySelector(".call-btn").innerText = translations[lang].call;
-            document.querySelector(".finish-btn").innerText = translations[lang].finish;
-            fetchCurrentTicket();
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            
+            // Update all translatable elements on this page
+            document.title = translations.operator_tablet_title || 'Operator Tablet (Планшет)';
+            document.getElementById("title").innerText = `${translations.operator_title || 'Оператор'} ${operatorId}`;
+            document.getElementById("current_ticket").innerText = currentTicket ? currentTicket : (translations.waiting || 'Ожидание...');
+            document.getElementById("callButton").innerText = translations.call_button || 'Вызвать';
+            document.getElementById("finishButton").innerText = translations.finish_button || 'Завершить';
         }
 
-        function toggleTheme() {
-            document.body.classList.toggle("dark");
-            const isDark = document.body.classList.contains("dark");
-            localStorage.setItem("theme", isDark ? "dark" : "light");
-            document.querySelector(".theme-toggle").innerText = isDark ? "☀️" : "🌙";
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0; // Default to light if invalid theme in localStorage
+
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes); // Remove all theme classes
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+
+            // Apply initial theme
+            applyTheme(themes[currentThemeIndex]);
+
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function setupButtons() {
+            document.getElementById('callButton').addEventListener('click', callTicket);
+            document.getElementById('finishButton').addEventListener('click', finishTicket);
         }
 
         socket.on("update_queue", function(data) {
+            // Check if the update is for this specific operator's tablet
             if (data.operator_id == operatorId && data.ticket) {
                 currentTicket = data.ticket;
                 document.getElementById("current_ticket").innerText = currentTicket;
-                showNotification(`Chaqirildi: ${currentTicket}`);
+                showNotification(`${translations.called_ticket || 'Вызван талон:'} ${currentTicket}`, 'info');
             }
         });
 
         socket.on("remove_ticket", function(data) {
+            // If the removed ticket is the one currently displayed on this tablet
             if (data.ticket === currentTicket) {
                 currentTicket = null;
-                document.getElementById("current_ticket").innerText = translations[currentLang].waiting;
+                document.getElementById("current_ticket").innerText = translations.waiting || 'Ожидание...';
+                showNotification(`${translations.ticket_finished || 'Талон завершен:'} ${data.ticket}`, 'info');
             }
         });
 
         async function fetchCurrentTicket() {
             try {
-                const response = await fetch(`${serverUrl}/tablet/${operatorId}/data`);
-                if (!response.ok) throw new Error(`Failed to fetch tickets: ${response.status}`);
-                const tickets = await response.json();
-                const calledTicket = tickets.find(t => t.status === "called");
-                if (calledTicket) {
-                    currentTicket = calledTicket.number;
+                const response = await fetch(`${SERVER_URL}/api/tablet/${operatorId}/current_ticket`);
+                if (!response.ok) throw new Error(`Failed to fetch current ticket: ${response.status}`);
+                const data = await response.json();
+                if (data.ticket_number) {
+                    currentTicket = data.ticket_number;
                     document.getElementById("current_ticket").innerText = currentTicket;
-                } else if (!currentTicket) {
-                    document.getElementById("current_ticket").innerText = translations[currentLang].waiting;
+                } else {
+                    currentTicket = null;
+                    document.getElementById("current_ticket").innerText = translations.waiting || 'Ожидание...';
                 }
             } catch (error) {
-                console.error("Error fetching tickets:", error);
-                showNotification(`${translations[currentLang].error_fetch}: ${error.message}`);
+                console.error("Error fetching current ticket:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
             }
         }
 
         async function callTicket() {
             try {
-                const response = await fetch(`${serverUrl}/call_ticket`, {
+                const response = await fetch(`${SERVER_URL}/api/operator/${operatorId}/call_next`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({operator_id: operatorId})
                 });
                 const data = await response.json();
-                if (data.ticket) {
-                    currentTicket = data.ticket;
+                if (response.ok) {
+                    currentTicket = data.ticket_number;
                     document.getElementById("current_ticket").innerText = currentTicket;
-                    showNotification(`Chaqirildi: ${currentTicket}`);
-                } else if (data.error) {
-                    showNotification(data.error);
+                    showNotification(`${translations.called_ticket || 'Вызван талон:'} ${currentTicket}`, 'info');
+                } else {
+                    showNotification(data.message || translations.error_calling_ticket || 'Ошибка вызова талона.', 'danger');
                 }
             } catch (error) {
                 console.error("Error calling ticket:", error);
-                showNotification(`${translations[currentLang].error_fetch}: ${error.message}`);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
             }
         }
 
         async function finishTicket() {
             if (!currentTicket) {
-                showNotification(translations[currentLang].error_no_ticket);
+                showNotification(translations.no_ticket_called || 'Нет вызванного талона для завершения.', 'danger');
                 return;
             }
             try {
-                const response = await fetch(`${serverUrl}/finish_ticket`, {
+                const response = await fetch(`${SERVER_URL}/api/operator/${operatorId}/finish_ticket`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({ticket: currentTicket, operator_id: operatorId})
+                    body: JSON.stringify({ticket: currentTicket})
                 });
+                const data = await response.json();
                 if (response.ok) {
-                    showNotification(`Tugatildi: ${currentTicket}`);
+                    showNotification(data.message || translations.finish_success || 'Талон завершен успешно.', 'info');
                     currentTicket = null;
-                    document.getElementById("current_ticket").innerText = translations[currentLang].waiting;
+                    document.getElementById("current_ticket").innerText = translations.waiting || 'Ожидание...';
+                } else {
+                    showNotification(data.message || translations.error_finishing_ticket || 'Ошибка завершения талона.', 'danger');
                 }
             } catch (error) {
                 console.error("Error finishing ticket:", error);
-                showNotification(`${translations[currentLang].error_fetch}: ${error.message}`);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
             }
         }
 
-        function showNotification(message) {
-            const existing = document.querySelector(".notification");
-            if (existing) existing.remove();
-            const notification = document.createElement("div");
-            notification.className = "notification";
-            notification.innerText = message;
-            document.body.appendChild(notification);
-            setTimeout(() => notification.remove(), 3000);
-        }
-
+        // Initial theme setup (from localStorage)
         if (localStorage.getItem("theme") === "dark") {
             document.body.classList.add("dark");
-            document.querySelector(".theme-toggle").innerText = "☀️";
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
         }
-
-        setLanguage(currentLang);
-        fetchCurrentTicket();
-        setInterval(fetchCurrentTicket, 5000);
     </script>
 </body>
 </html>

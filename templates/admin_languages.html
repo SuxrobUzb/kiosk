@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление языками</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f4f7fa;
+            --text: #222831;
+            --card-bg: #ffffff;
+            --primary: #1a73e8;
+            --secondary: #34c759;
+            --danger: #e53e3e;
+            --border-color: #bdbdbd;
+        }
+        body.dark {
+            --bg: #1a202c;
+            --text: #e2e8f0;
+            --card-bg: #2d3748;
+            --primary: #63b3ed;
+            --secondary: #68d391;
+            --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #222831;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .container {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+            padding: 2rem;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            transition: background-color 0.3s ease;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s, transform 0.2s;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background-color: #1558b0;
+            color: #fff;
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background-color: var(--danger);
+            color: #fff;
+        }
+        .btn-danger:hover {
+            background-color: #b91c1c;
+            color: #fff;
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: #fff;
+        }
+        .btn-secondary:hover {
+            background-color: #218838;
+            color: #fff;
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th {
+            background-color: var(--primary);
+            color: #fff;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        .dark tr:nth-child(even) {
+            background-color: #2d3748;
+        }
+        tr:hover {
+            background-color: #e3e8ee;
+        }
+        .dark tr:hover {
+            background-color: #4a5568;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .action-buttons .btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        input[type="text"] {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            background-color: var(--card-bg);
+            color: var(--text);
+            width: 100%;
+        }
+        input[type="text"]:focus {
+            outline: 2px solid var(--primary);
+            border-color: var(--primary);
+        }
+        @media (max-width: 768px) {
+            body { padding: 20px; }
+            .container { padding: 1rem; }
+            .header { flex-direction: column; align-items: flex-start; }
+            .header nav { margin-top: 10px; }
+            .controls { flex-direction: column; align-items: flex-end; top: 10px; right: 10px; }
+            .controls .lang-btn, .controls .theme-toggle { width: auto; margin-bottom: 5px; }
+            table, thead, tbody, th, td, tr { display: block; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; }
+            tr { border: 1px solid var(--border-color); margin-bottom: 0.625rem; }
+            td {
+                border: none;
+                border-bottom: 1px solid var(--border-color);
+                position: relative;
+                padding-left: 50%;
+                text-align: right;
+            }
+            td:before {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                width: 45%;
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+            }
+            td:nth-of-type(1):before { content: attr(data-label); }
+            td:nth-of-type(2):before { content: attr(data-label); }
+            td:nth-of-type(3):before { content: attr(data-label); }
+            .action-buttons { justify-content: flex-end; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="absolute top-4 right-4 flex space-x-2 controls">
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
+        <div id="language-buttons" class="flex space-x-2"></div>
+    </div>
+    <div class="container">
+        <header class="flex justify-between items-center mb-6 flex-wrap">
+            <h1 id="pageTitle" class="text-3xl font-bold mb-2 md:mb-0">Управление языками</h1>
+            <nav class="flex space-x-4">
+                <a href="/admin" id="backToAdminButton" class="btn btn-secondary">Назад в админ-панель</a>
+                <a href="/admin_logout" id="logoutButton" class="btn btn-danger">Выход</a>
+            </nav>
+        </header>
+        <div class="mb-6">
+            <h2 id="addLanguageTitle" class="text-2xl font-semibold mb-4">Добавить новый язык</h2>
+            <div class="flex flex-col md:flex-row gap-4">
+                <input type="text" id="langCode" placeholder="Код языка (например, en, uz_lat, ru)" class="flex-grow">
+                <input type="text" id="displayName" placeholder="Отображаемое имя (например, English, O'zbek, Русский)" class="flex-grow">
+                <button id="addLanguageButton" class="btn btn-primary">Добавить</button>
+            </div>
+        </div>
+        <div>
+            <h2 id="languageListTitle" class="text-2xl font-semibold mb-4">Список языков</h2>
+            <table class="min-w-full">
+                <thead>
+                    <tr>
+                        <th id="langCodeHeader">Код языка</th>
+                        <th id="displayNameHeader">Отображаемое имя</th>
+                        <th id="actionsHeader">Действия</th>
+                    </tr>
+                </thead>
+                <tbody id="languageTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const SERVER_URL = "{{ SERVER_URL }}";
+        let currentLang = localStorage.getItem('language') || 'uz_lat';
+        let translations = {};
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    loadLanguagesList();
+                });
+            });
+            setupThemeToggle();
+            setupAddLanguage();
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = '';
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Error loading languages:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Error loading translations:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            document.title = translations.language_management || 'Управление языками';
+            document.getElementById("pageTitle").innerText = translations.language_management || 'Управление языками';
+            document.getElementById("backToAdminButton").innerText = translations.back_to_admin_panel || 'Назад в админ-панель';
+            document.getElementById("logoutButton").innerText = translations.logout_button || 'Выход';
+            document.getElementById("addLanguageTitle").innerText = translations.add_new_language || 'Добавить новый язык';
+            document.getElementById("langCode").placeholder = translations.lang_code_placeholder || 'Код языка (например, en, uz_lat, ru)';
+            document.getElementById("displayName").placeholder = translations.display_name_placeholder || 'Отображаемое имя (например, English, O\'zbek, Русский)';
+            document.getElementById("addLanguageButton").innerText = translations.add_button || 'Добавить';
+            document.getElementById("languageListTitle").innerText = translations.language_list_title || 'Список языков';
+            document.getElementById("langCodeHeader").innerText = translations.table_lang_code || 'Код языка';
+            document.getElementById("displayNameHeader").innerText = translations.table_display_name || 'Отображаемое имя';
+            document.getElementById("actionsHeader").innerText = translations.table_actions || 'Действия';
+            loadLanguagesList();
+        }
+
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0;
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes);
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+            applyTheme(themes[currentThemeIndex]);
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        async function loadLanguagesList() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) throw new Error("Failed to fetch languages");
+                const languages = await response.json();
+                const tableBody = document.getElementById('languageTableBody');
+                tableBody.innerHTML = '';
+                languages.forEach(lang => {
+                    const row = tableBody.insertRow();
+                    row.innerHTML = `
+                        <td data-label="${translations.table_lang_code || 'Код языка'}">${lang.lang_code}</td>
+                        <td data-label="${translations.table_display_name || 'Отображаемое имя'}">${lang.display_name}</td>
+                        <td data-label="${translations.table_actions || 'Действия'}" class="action-buttons">
+                            <button class="btn btn-primary edit-btn"
+                                data-id="${lang.id}"
+                                data-lang-code="${lang.lang_code}"
+                                data-display-name="${lang.display_name}">
+                                ${translations.edit_button || 'Редактировать'}
+                            </button>
+                            <button class="btn btn-danger delete-btn" data-id="${lang.id}">${translations.delete_button || 'Удалить'}</button>
+                        </td>
+                    `;
+                });
+                attachLanguageEventListeners();
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки списка языков:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function attachLanguageEventListeners() {
+            document.querySelectorAll('.edit-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const { id, langCode, displayName } = event.target.dataset;
+                    editLanguage(id, langCode, displayName);
+                };
+            });
+            document.querySelectorAll('.delete-btn').forEach(button => {
+                button.onclick = (event) => {
+                    const id = event.target.dataset.id;
+                    deleteLanguage(id);
+                };
+            });
+        }
+
+        function setupAddLanguage() {
+            document.getElementById('addLanguageButton').addEventListener('click', addLanguage);
+            document.getElementById('langCode').addEventListener('keypress', (e) => { if (e.key === 'Enter') addLanguage(); });
+            document.getElementById('displayName').addEventListener('keypress', (e) => { if (e.key === 'Enter') addLanguage(); });
+        }
+
+        async function addLanguage() {
+            const langCodeInput = document.getElementById('langCode');
+            const displayNameInput = document.getElementById('displayName');
+            const lang_code = langCodeInput.value.trim();
+            const display_name = displayNameInput.value.trim();
+            if (!lang_code || !display_name) {
+                showNotification(translations.empty_language_fields || 'Код языка и отображаемое имя не могут быть пустыми.', 'danger');
+                return;
+            }
+            try {
+                const response = await fetch(`${SERVER_URL}/api/admin/languages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lang_code, display_name })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.message || translations.language_added_success || 'Язык успешно добавлен.', 'info');
+                    langCodeInput.value = '';
+                    displayNameInput.value = '';
+                    loadLanguages();
+                } else {
+                    showNotification(data.error || translations.error_adding_language || 'Ошибка добавления языка.', 'danger');
+                }
+            } catch (error) {
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function editLanguage(id, currentLangCode, currentDisplayName) {
+            const modal = document.createElement('div');
+            modal.className = "fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50";
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md">
+                    <h3 class="text-2xl font-bold mb-4">${translations.edit_language || 'Редактировать язык'}</h3>
+                    <div class="mb-4">
+                        <label for="editLangCode" class="block text-sm font-medium mb-1">${translations.lang_code_placeholder || 'Код языка'}:</label>
+                        <input type="text" id="editLangCode" value="${currentLangCode}" class="w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <label for="editDisplayName" class="block text-sm font-medium mb-1">${translations.display_name_placeholder || 'Отображаемое имя'}:</label>
+                        <input type="text" id="editDisplayName" value="${currentDisplayName}" class="w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
+                    <div class="flex justify-end space-x-4">
+                        <button id="cancelEditButton" class="btn btn-secondary">${translations.cancel_button || 'Отмена'}</button>
+                        <button id="saveEditButton" class="btn btn-primary">${translations.save_button || 'Сохранить'}</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            document.getElementById('cancelEditButton').onclick = () => modal.remove();
+            document.getElementById('saveEditButton').onclick = async () => {
+                const updatedDisplayName = document.getElementById('editDisplayName').value.trim();
+                if (!updatedDisplayName) {
+                    showNotification(translations.empty_display_name || 'Отображаемое имя не может быть пустым.', 'danger');
+                    return;
+                }
+                try {
+                    const response = await fetch(`${SERVER_URL}/api/admin/languages/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ display_name: updatedDisplayName })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showNotification(data.message || translations.language_updated_success || 'Язык успешно обновлен.', 'info');
+                        modal.remove();
+                        loadLanguages();
+                    } else {
+                        showNotification(data.error || translations.error_updating_language || 'Ошибка обновления языка.', 'danger');
+                    }
+                } catch (error) {
+                    showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+                }
+            };
+        }
+
+        function deleteLanguage(id) {
+            if (!confirm(translations.confirm_delete_language || 'Вы уверены, что хотите удалить этот язык?')) {
+                return;
+            }
+            fetch(`${SERVER_URL}/api/admin/languages/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json().then(data => ({ status: response.status, body: data })))
+            .then(({ status, body }) => {
+                if (status === 200) {
+                    showNotification(body.message || translations.language_deleted_success || 'Язык успешно удален.', 'info');
+                    loadLanguages();
+                } else {
+                    showNotification(body.error || translations.error_deleting_language || 'Ошибка удаления языка.', 'danger');
+                }
+            })
+            .catch(error => {
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            });
+        }
+
+        // Initial theme setup (from localStorage)
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("dark");
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,646 @@
+/* Custom CSS for theme variables and basic styles */
+:root {
+    --bg: #f4f7fa;
+    --text: #2d3748;
+    --card-bg: #ffffff;
+    --primary: #1a73e8;
+    --secondary: #34c759;
+    --danger: #e53e3e;
+    --border-color: #e2e8f0;
+}
+
+/* Dark theme variables */
+body.dark {
+    --bg: #1a202c;
+    --text: #e2e8f0;
+    --card-bg: #2d3748;
+    --primary: #63b3ed;
+    --secondary: #68d391;
+    --danger: #f56565;
+    --border-color: #4a5568;
+}
+
+/* Daltonic (colorblind-friendly) theme variables */
+body.daltonic {
+    --bg: #f0f0f0; /* Light gray */
+    --text: #333333; /* Dark gray */
+    --card-bg: #cccccc; /* Medium gray */
+    --primary: #007bff; /* Bright blue */
+    --secondary: #28a745; /* Green */
+    --danger: #dc3545; /* Red */
+    --border-color: #999999; /* Gray border */
+}
+
+/* Base styles */
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    min-height: 100vh;
+}
+
+/* Container styles (used in many pages) */
+.container {
+    background-color: var(--card-bg);
+    border-radius: 0.75rem; /* rounded-xl */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* shadow-md */
+    padding: 2rem;
+    width: 100%;
+    max-width: 900px; /* Adjust as needed for specific pages */
+    margin: 20px auto; /* Center with some margin */
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Button styles */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem; /* rounded-lg */
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    display: inline-flex; /* For better alignment with icons/text */
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background-color: var(--danger);
+    color: white;
+}
+
+.btn-danger:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: var(--secondary);
+    color: white;
+}
+
+.btn-secondary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+/* Input field styles */
+.input-field {
+    border: 1px solid var(--border-color);
+    background-color: var(--bg);
+    color: var(--text);
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.input-field:focus {
+    border-color: var(--primary);
+    outline: none;
+}
+
+/* Notification styles (used across pages) */
+.notification {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    background-color: var(--primary); /* Default info color */
+    color: white;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(-20px);
+    animation: fadeInOut 3s forwards;
+}
+
+.notification.danger {
+    background-color: var(--danger);
+}
+
+.notification.info {
+    background-color: var(--primary);
+}
+
+@keyframes fadeInOut {
+    0% { opacity: 0; transform: translateY(-20px); }
+    10% { opacity: 1; transform: translateY(0); }
+    90% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-20px); }
+}
+
+/* Table styles (general) */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5rem;
+    background-color: var(--card-bg);
+    border-radius: 0.75rem;
+    overflow: hidden; /* Ensures rounded corners are applied */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+th, td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    background-color: var(--primary);
+    color: white;
+    font-weight: 600;
+}
+
+tr:nth-child(even) {
+    background-color: var(--bg);
+}
+
+.dark tr:nth-child(even) {
+    background-color: #2d3748;
+}
+
+tr:hover {
+    background-color: #f0f4f8; /* Light blue on hover */
+}
+
+.dark tr:hover {
+    background-color: #4a5568;
+}
+
+/* Action buttons in tables */
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.action-buttons .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+/* Responsive adjustments for general elements */
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+        margin: 10px auto;
+    }
+    .btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+    }
+    .input-field {
+        padding: 0.6rem;
+    }
+    .notification {
+        top: 0.5rem;
+        right: 0.5rem;
+        padding: 0.6rem 1rem;
+        font-size: 0.9rem;
+    }
+    th, td {
+        padding: 0.6rem 0.8rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* Specific styles for chat.html */
+.chat-container {
+    height: 80vh;
+    max-width: 700px;
+}
+
+.chat-messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.message-bubble {
+    max-width: 70%;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    word-wrap: break-word;
+    font-size: 0.95rem;
+}
+
+.message-bubble.client {
+    background-color: var(--primary);
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.message-bubble.operator {
+    background-color: #e2e8f0; /* Light gray */
+    color: var(--text);
+    align-self: flex-start;
+    border-bottom-left-radius: 0.25rem;
+}
+
+.dark .message-bubble.operator {
+    background-color: #4a5568;
+    color: var(--text);
+}
+
+.message-time {
+    font-size: 0.75rem;
+    color: #6b7280; /* Gray-500 */
+    margin-top: 0.25rem;
+}
+
+.message-bubble.client .message-time {
+    text-align: right;
+}
+
+.message-bubble.operator .message-time {
+    text-align: left;
+}
+
+.chat-input-area {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.chat-input {
+    flex-grow: 1;
+}
+
+.btn-file-upload {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-file-upload input[type="file"] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+}
+
+.file-preview {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.file-link {
+    color: white;
+    text-decoration: underline;
+}
+
+.operator-name {
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+}
+
+/* Specific styles for index.html */
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+.grid-item {
+    background-color: var(--primary);
+    color: white;
+    padding: 1.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.grid-item:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+}
+.grid-item.disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.ticket-info {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background-color: var(--bg);
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+}
+.qr-code {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+}
+.qr-code img {
+    max-width: 150px;
+    height: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+}
+.back-button {
+    margin-top: 1.5rem;
+    background-color: #6c757d; /* Gray for back button */
+    color: white;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.back-button:hover {
+    background-color: #5a6268;
+    transform: translateY(-1px);
+}
+.language-theme-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+}
+.lang-btn, .theme-toggle {
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    background-color: #e2e8f0; /* Light gray */
+    color: #2d3748; /* Dark text */
+    transition: background-color 0.2s ease;
+}
+.dark .lang-btn, .dark .theme-toggle {
+    background-color: #4a5568; /* Darker gray */
+    color: #e2e8f0; /* Light text */
+}
+.lang-btn.active {
+    background-color: var(--primary);
+    color: white;
+}
+.telegram-link-section {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background-color: var(--card-bg);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+.telegram-link-section input {
+    width: 100%;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bg);
+    color: var(--text);
+}
+.telegram-link-section button {
+    background-color: var(--primary);
+    color: white;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
+    width: 100%;
+    transition: background-color 0.2s ease;
+}
+.telegram-link-section button:hover {
+    opacity: 0.9;
+}
+
+/* Specific styles for display.html */
+.header {
+    background-color: var(--primary);
+    color: white;
+    padding: 1.5rem 2rem;
+    text-align: center;
+    font-size: 2.5rem;
+    font-weight: 700;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 10;
+}
+.main-content {
+    flex-grow: 1;
+    display: flex;
+    padding: 1rem;
+    gap: 1rem;
+    overflow: hidden;
+}
+.video-section {
+    flex: 2;
+    background-color: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    position: relative;
+    transition: flex 0.5s ease-in-out;
+}
+.video-section.fullscreen {
+    flex: 1; /* Takes full width when queue is hidden */
+}
+#displayVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Ensures video fits without cropping */
+}
+.queue-section {
+    flex: 1;
+    background-color: var(--card-bg);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    transition: flex 0.5s ease-in-out;
+}
+.queue-section.hidden {
+    flex: 0; /* Collapse when hidden */
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+.queue-section h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    text-align: center;
+    color: var(--primary);
+}
+.queue-table {
+    width: 100%;
+    border-collapse: separate; /* For rounded corners */
+    border-spacing: 0;
+    overflow: hidden; /* Ensures rounded corners are applied */
+}
+.queue-table th, .queue-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+.queue-table th {
+    background-color: var(--primary);
+    color: white;
+    font-weight: 600;
+    font-size: 1.1rem;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+.queue-table tbody {
+    display: block;
+    max-height: calc(100vh - 200px); /* Adjust based on header/footer height */
+    overflow-y: auto;
+}
+.queue-table tr {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    transition: background-color 0.3s ease;
+}
+.queue-table tr:nth-child(even) {
+    background-color: var(--bg);
+}
+.dark .queue-table tr:nth-child(even) {
+    background-color: #2d3748;
+}
+.queue-table tr:hover {
+    background-color: #e0e7ff; /* Light blue on hover */
+}
+.dark .queue-table tr:hover {
+    background-color: #4a5568;
+}
+.latest-call {
+    background-color: var(--secondary) !important;
+    color: white;
+    animation: pulse 1.5s infinite alternate;
+}
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 rgba(0,0,0,0); }
+    100% { transform: scale(1.02); box-shadow: 0 0 15px rgba(0,255,0,0.5); }
+}
+
+/* Specific styles for operator.html (tablet.html will use similar) */
+.operator-card {
+    background: var(--card-bg);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+.operator-info {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+.ticket-display {
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 1.5rem;
+}
+.operator-actions button {
+    width: 100%;
+    margin-bottom: 0.75rem;
+}
+.called-ticket {
+    background-color: var(--secondary) !important;
+    color: white;
+    font-weight: bold;
+}
+.dark .called-ticket {
+    background-color: #68d391 !important;
+}
+
+/* Responsive adjustments for specific pages */
+@media (max-width: 768px) {
+    /* chat.html */
+    .chat-container {
+        padding: 1rem;
+        height: 90vh;
+    }
+    .message-bubble {
+        max-width: 90%;
+        padding: 0.6rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    .chat-input-area {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .chat-input, .btn-send, .btn-file-upload {
+        width: 100%;
+    }
+
+    /* index.html */
+    .grid-container {
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    }
+    .grid-item {
+        padding: 1rem 0.5rem;
+        font-size: 0.9rem;
+    }
+    .language-theme-controls {
+        flex-direction: column;
+        align-items: flex-end;
+        top: 10px;
+        right: 10px;
+    }
+    .lang-btn, .theme-toggle {
+        width: auto;
+        margin-bottom: 5px;
+    }
+
+    /* display.html */
+    .header {
+        font-size: 1.8rem;
+        padding: 1rem;
+    }
+    .main-content {
+        flex-direction: column;
+        padding: 0.5rem;
+        gap: 0.5rem;
+    }
+    .video-section, .queue-section {
+        flex: none;
+        width: 100%;
+        height: auto;
+    }
+    .queue-section.hidden {
+        display: none;
+    }
+    .queue-table th, .queue-table td {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
+    .queue-table tbody {
+        max-height: 300px;
+    }
+}

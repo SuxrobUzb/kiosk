@@ -2,18 +2,11 @@
 <html>
 <head>
     <title>Operator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #f4f7fa;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-        }
+        /* Custom CSS for theme variables and basic styles */
         :root {
             --bg: #f4f7fa;
             --text: #2d3748;
@@ -21,6 +14,7 @@
             --primary: #1a73e8;
             --secondary: #34c759;
             --danger: #e53e3e;
+            --border-color: #e2e8f0;
         }
         body.dark {
             --bg: #1a202c;
@@ -29,13 +23,44 @@
             --primary: #63b3ed;
             --secondary: #68d391;
             --danger: #f56565;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --danger: #dc3545;
+            --border-color: #999999;
         }
         body {
+            font-family: 'Inter', sans-serif;
             background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
             color: var(--text);
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
-        .container { background: var(--card-bg); border-radius: 12px; padding: 24px; width: 100%; max-width: 600px; }
-        h1 { font-size: 24px; font-weight: 600; color: var(--text); text-align: center; margin-bottom: 20px; }
+        .container {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 24px;
+            width: 100%;
+            max-width: 800px;
+            transition: background-color 0.3s ease;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text);
+            text-align: center;
+            margin-bottom: 20px;
+        }
         #current_ticket {
             font-size: 18px;
             padding: 12px;
@@ -44,9 +69,16 @@
             text-align: center;
             margin-bottom: 20px;
             color: var(--text);
+            transition: background-color 0.3s ease;
         }
         .dark #current_ticket { background: #4a5568; }
-        .buttons { display: flex; gap: 12px; flex-wrap: wrap; }
+        .buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
         button {
             flex: 1;
             padding: 12px;
@@ -57,21 +89,29 @@
             color: #ffffff;
             cursor: pointer;
             transition: all 0.2s;
+            min-width: 120px; /* Ensure buttons don't get too small */
         }
         button:disabled {
             background: #a0aec0;
             cursor: not-allowed;
+            opacity: 0.7;
         }
         .call-btn { background: var(--primary); }
-        .call-btn:hover { background: #1666c5; }
+        .call-btn:hover:not(:disabled) { background: #1666c5; transform: translateY(-1px); }
         .finish-btn { background: var(--secondary); }
-        .finish-btn:hover { background: #2fb34e; }
+        .finish-btn:hover:not(:disabled) { background: #2fb34e; transform: translateY(-1px); }
+        .cancel-btn { background: var(--danger); }
+        .cancel-btn:hover:not(:disabled) { background: #c53030; transform: translateY(-1px); }
         .redirect-btn { background: #ed8936; }
-        .redirect-btn:hover { background: #dd6b20; }
-        #history { margin-top: 20px; font-size: 14px; color: #718096; }
-        .dark #history { color: #a0aec0; }
-        #history div { padding: 6px 0; }
-        .controls { margin-bottom: 20px; display: flex; gap: 10px; justify-content: center; }
+        .redirect-btn:hover:not(:disabled) { background: #dd6b20; transform: translateY(-1px); }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap; /* Allow controls to wrap on smaller screens */
+        }
         .lang-btn, .theme-toggle {
             padding: 6px 12px;
             background: #ffffff;
@@ -86,45 +126,121 @@
         .lang-btn:hover, .theme-toggle:hover { background: #eef4fd; }
         .dark .lang-btn:hover, .dark .theme-toggle:hover { background: #4a5568; }
         .lang-btn.active { background: var(--primary); color: #ffffff; border-color: var(--primary); }
-        .redirect-form { margin-top: 20px; display: flex; gap: 12px; }
-        select {
+
+        .redirect-form {
+            margin-top: 20px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap; /* Allow form elements to wrap */
+            justify-content: center;
+            align-items: center;
+        }
+        .redirect-form select {
+            flex: 1;
             padding: 12px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border-color);
             border-radius: 8px;
             font-size: 16px;
-            flex: 1;
-            background: #ffffff;
+            background: var(--card-bg);
             color: var(--text);
+            min-width: 150px; /* Ensure select box doesn't get too small */
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
-        .dark select { background: #4a5568; border-color: #718096; }
         .chat { margin-top: 20px; }
         .chat-box {
-            max-height: 200px;
+            max-height: 300px; /* Increased height for better chat experience */
             overflow-y: auto;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 12px;
             margin-bottom: 12px;
-            background: #ffffff;
+            background: var(--card-bg);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
-        .dark .chat-box { border-color: #4a5568; background: #2d3748; }
-        .chat-input { display: flex; gap: 12px; }
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .chat-message.operator {
+            background-color: var(--primary);
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .chat-message.client {
+            background-color: #e2e8f0;
+            color: var(--text);
+            margin-right: auto;
+        }
+        .dark .chat-message.client {
+            background-color: #4a5568;
+            color: #e2e8f0;
+        }
+        .chat-message .timestamp {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.7);
+            display: block;
+            margin-top: 4px;
+        }
+        .chat-message.client .timestamp {
+            color: rgba(0, 0, 0, 0.5);
+        }
+        .chat-message img, .chat-message video {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin-top: 8px;
+        }
+        .chat-message a {
+            color: var(--primary);
+            text-decoration: underline;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 12px;
+            align-items: center; /* Align items vertically */
+            flex-wrap: wrap; /* Allow input elements to wrap */
+        }
         textarea {
             flex: 1;
             padding: 12px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border-color);
             border-radius: 8px;
             font-size: 14px;
-            resize: none;
-            background: #ffffff;
+            resize: vertical; /* Allow vertical resizing */
+            min-height: 40px; /* Minimum height for textarea */
+            background: var(--card-bg);
             color: var(--text);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
-        .dark textarea { background: #4a5568; border-color: #718096; }
         .ticket-list { margin-top: 20px; }
-        .ticket-list table { width: 100%; border-collapse: collapse; }
-        .ticket-list th, .ticket-list td { padding: 8px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-        .dark .ticket-list th, .dark .ticket-list td { border-bottom: 1px solid #4a5568; }
-        .ticket-list th { background: var(--primary); color: #ffffff; }
+        .ticket-list table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: background-color 0.3s ease;
+        }
+        .ticket-list th, .ticket-list td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            transition: border-color 0.3s ease;
+        }
+        .ticket-list th {
+            background: var(--primary);
+            color: #ffffff;
+            font-weight: 600;
+        }
+        .ticket-list tr:last-child td { border-bottom: none; }
+        .ticket-list tr:hover { background: #f7fafc; }
+        .dark .ticket-list tr:hover { background: #4a5568; }
         /* Added style for called ticket */
         .called-ticket {
             background: #ffedd5;
@@ -133,250 +249,573 @@
         .dark .called-ticket {
             background: #7c3aed;
         }
+        /* Notification styles */
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background-color: var(--primary);
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            animation: fadeInOut 3s forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-20px); }
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 </head>
 <body>
     <div class="controls">
-        <button class="lang-btn active" onclick="setLanguage('uz_lat')">Uz (Lat)</button>
-        <button class="lang-btn" onclick="setLanguage('uz_cyr')">Ўз (Кирилл)</button>
-        <button class="lang-btn" onclick="setLanguage('ru')">Ру</button>
-        <button class="lang-btn" onclick="setLanguage('en')">En</button>
-        <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
-        <button class="redirect-btn" onclick="location.href='/logout'">Chiqish</button>
+        <div id="language-buttons" class="flex space-x-2">
+            <!-- Language buttons will be loaded here dynamically -->
+        </div>
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
+        <button onclick="location.href='{{ SERVER_URL }}/operator_logout'" class="btn bg-red-500 text-white hover:bg-red-600">
+            Выход
+        </button>
     </div>
     <div class="container">
-        <h1 id="title">Operator: {{ operator_id }}</h1>
-        <div id="current_ticket">Joriy talon: <span id="ticket_number">Yo‘q</span></div>
+        <h1 id="title">Оператор: {{ operator_id }}</h1>
+        <div id="current_ticket">Текущий талон: <span id="ticket_number">Нет</span></div>
         <div class="buttons">
-            <button class="call-btn" onclick="callTicket()">Chaqirish</button>
-            <button class="finish-btn" onclick="finishTicket()">Tugatish</button>
+            <button class="call-btn" id="callNextButton">Вызвать следующего</button>
+            <button class="finish-btn" id="finishTicketButton">Завершить</button>
+            <button class="cancel-btn" id="cancelTicketButton">Отменить (неявка)</button>
         </div>
         <div class="redirect-form">
-            <select id="redirect_operator">
-                <option value="">Operator tanlash</option>
-                {% for op in operators %}
-                    {% if op[0] != operator_id %}
-                        <option value="{{ op[0] }}">{{ op[1] }}</option>
-                    {% endif %}
-                {% endfor %}
+            <select id="redirect_service" class="w-full">
+                <option value="">-- Выберите услугу для перенаправления --</option>
             </select>
-            <button class="redirect-btn" id="redirectButton" onclick="redirectTicket()">Yo‘naltirish</button>
+            <select id="redirect_operator" class="w-full">
+                <option value="">-- Выберите оператора (опционально) --</option>
+            </select>
+            <button class="redirect-btn" id="redirectButton">Перенаправить</button>
         </div>
         <div class="ticket-list">
-            <h2 id="tickets_title">Mening talonlarim</h2>
-            <table id="ticketTable">
-                <tr><th>Navbat</th><th>Holati</th></tr>
-                {% for ticket in tickets %}
-                    <tr><td>{{ ticket[0] }}</td><td>{{ ticket[1] }}</td></tr>
-                {% endfor %}
+            <h2 id="tickets_title" class="text-xl font-semibold mb-4">Мои талоны</h2>
+            <table id="ticketTable" class="min-w-full">
+                <thead>
+                    <tr>
+                        <th>Номер талона</th>
+                        <th>Услуга</th>
+                        <th>Статус</th>
+                        <th>Приоритет</th>
+                        <th>Время создания</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Tickets will be loaded here -->
+                </tbody>
             </table>
         </div>
         <div class="chat">
-            <h2 id="chat_title">Chat</h2>
+            <h2 id="chat_title" class="text-xl font-semibold mb-4">Чат</h2>
             <div class="chat-box" id="chat_box">
-                {% for msg in messages %}
-                    <div>{{ msg[0] }}: {{ msg[1] }} ({{ msg[2] }})</div>
-                {% endfor %}
+                <!-- Chat messages will be loaded here -->
             </div>
             <div class="chat-input">
-                <textarea id="chat_message" rows="2" placeholder="Xabar yozing"></textarea>
-                <button class="call-btn" onclick="sendMessage()">Yuborish</button>
+                <textarea id="chat_message" rows="2" placeholder="Напишите сообщение..." class="p-2 border rounded-md"></textarea>
+                <input type="file" id="chatFileInput" class="hidden" accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain">
+                <button id="attachFileButton" class="btn bg-gray-300 text-gray-800 hover:bg-gray-400">Прикрепить файл</button>
+                <button id="sendMessageButton" class="call-btn">Отправить</button>
             </div>
         </div>
     </div>
     <script>
-        const translations = {
-            uz_lat: { 
-                title: "Operator", tickets: "Mening talonlarim", chat: "Chat", call: "Chaqirish", 
-                finish: "Tugatish", redirect: "Yo‘naltirish", send: "Yuborish", none: "Yo‘q",
-                error_no_ticket: "Hech qanday taloon chaqirilmagan!",
-                error_no_operator: "Operator tanlanmagan!"
-            },
-            uz_cyr: { 
-                title: "Оператор", tickets: "Менинг талонларим", chat: "Чат", call: "Чақириш", 
-                finish: "Тугатиш", redirect: "Йўналтириш", send: "Юбориш", none: "Йўқ",
-                error_no_ticket: "Ҳеч қандай талон чақирилмаган!",
-                error_no_operator: "Оператор танланмаган!"
-            },
-            ru: { 
-                title: "Оператор", tickets: "Мои талоны", chat: "Чат", call: "Вызвать", 
-                finish: "Завершить", redirect: "Перенаправить", send: "Отправить", none: "Нет",
-                error_no_ticket: "Ни один талон не вызван!",
-                error_no_operator: "Оператор не выбран!"
-            },
-            en: { 
-                title: "Operator", tickets: "My Tickets", chat: "Chat", call: "Call", 
-                finish: "Finish", redirect: "Redirect", send: "Send", none: "None",
-                error_no_ticket: "No ticket has been called!",
-                error_no_operator: "No operator selected!"
-            }
-        };
-        let currentLang = "uz_lat";
-        const serverUrl = "{{ server_url }}";
+        const SERVER_URL = "{{ SERVER_URL }}";
         const operatorId = {{ operator_id }};
-        const socket = io(serverUrl);
+        let currentLang = localStorage.getItem('language') || 'ru'; // Default to Russian
+        let translations = {};
+        let currentCalledTicketNumber = null; // Stores the number of the ticket currently 'called' by this operator
+
+        const socket = io(SERVER_URL);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    updateTicketList();
+                    loadServicesForRedirect();
+                    loadOperatorsForRedirect();
+                    setupChat(); // Initialize chat after translations are loaded
+                });
+            });
+            setupThemeToggle();
+            setupButtons();
+            setInterval(updateTicketList, 5000); // Refresh ticket list every 5 seconds
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = ''; // Clear existing buttons
+
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error loading languages:", error);
+                showNotification(`${translations.error_fetch || 'Error loading languages:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+                showNotification(`${translations.error_fetch || 'Error loading translations:'} ${error.message}`, 'danger');
+            }
+        }
 
         function setLanguage(lang) {
             currentLang = lang;
-            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active"));
-            document.querySelector(`button[onclick="setLanguage('${lang}')"]`).classList.add("active");
-            document.getElementById("title").innerText = `${translations[lang].title}: ${operatorId}`;
-            document.getElementById("tickets_title").innerText = translations[lang].tickets;
-            document.getElementById("chat_title").innerText = translations[lang].chat;
-            document.querySelector(".call-btn").innerText = translations[lang].call;
-            document.querySelector(".finish-btn").innerText = translations[lang].finish;
-            document.querySelector("#redirectButton").innerText = translations[lang].redirect;
-            document.querySelector(".chat-input button").innerText = translations[lang].send;
-            updateTicketList(); // Refresh ticket list to update translations
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            
+            // Update all translatable elements on this page
+            document.title = translations.operator_title || 'Operator';
+            document.getElementById("title").innerText = `${translations.operator_title || 'Оператор'}: ${operatorId}`;
+            document.getElementById("current_ticket").innerHTML = `${translations.current_ticket || 'Текущий талон'}: <span id="ticket_number">${currentCalledTicketNumber || translations.none || 'Нет'}</span>`;
+            document.getElementById("callNextButton").innerText = translations.call_next || 'Вызвать следующего';
+            document.getElementById("finishTicketButton").innerText = translations.finish_ticket || 'Завершить';
+            document.getElementById("cancelTicketButton").innerText = translations.cancel_ticket || 'Отменить (неявка)';
+            document.getElementById("redirectButton").innerText = translations.redirect_ticket || 'Перенаправить';
+            document.getElementById("tickets_title").innerText = translations.tickets_in_queue || 'Мои талоны';
+            document.getElementById("chat_title").innerText = translations.chat_title || 'Чат';
+            document.getElementById("chat_message").placeholder = translations.chat_message_placeholder || 'Напишите сообщение...';
+            document.getElementById("attachFileButton").innerText = translations.chat_file_upload_button || 'Прикрепить файл';
+            document.getElementById("sendMessageButton").innerText = translations.chat_send_message || 'Отправить';
+
+            // Update table headers
+            const tableHeaders = document.querySelectorAll('#ticketTable thead th');
+            if (tableHeaders.length > 0) {
+                tableHeaders[0].innerText = translations.ticket_number_column || 'Номер талона';
+                tableHeaders[1].innerText = translations.service_name_column || 'Услуга'; // Assuming a new translation key
+                tableHeaders[2].innerText = translations.status_column || 'Статус';
+                tableHeaders[3].innerText = translations.priority || 'Приоритет';
+                tableHeaders[4].innerText = translations.created_at_column || 'Время создания'; // Assuming a new translation key
+            }
+
+            // Update placeholder for redirect selects
+            document.getElementById('redirect_service').querySelector('option[value=""]').innerText = translations.select_service_for_redirect || '-- Выберите услугу для перенаправления --';
+            document.getElementById('redirect_operator').querySelector('option[value=""]').innerText = translations.select_operator_for_redirect || '-- Выберите оператора (опционально) --';
+
+            updateTicketList(); // Refresh ticket list to apply new language to dynamic content
+            loadServicesForRedirect(); // Reload services to apply new language
+            loadOperatorsForRedirect(); // Reload operators to apply new language
+            if (currentCalledTicketNumber) {
+                loadChatHistory(currentCalledTicketNumber); // Reload chat history for current ticket
+            }
         }
 
-        function toggleTheme() {
-            document.body.classList.toggle("dark");
-            const isDark = document.body.classList.contains("dark");
-            localStorage.setItem("theme", isDark ? "dark" : "light");
-            document.querySelector(".theme-toggle").innerText = isDark ? "☀️" : "🌙";
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0; // Default to light if invalid theme in localStorage
+
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes); // Remove all theme classes
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+
+            // Apply initial theme
+            applyTheme(themes[currentThemeIndex]);
+
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
         }
 
-        async function callTicket() {
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function setupButtons() {
+            document.getElementById('callNextButton').addEventListener('click', callNextTicket);
+            document.getElementById('finishTicketButton').addEventListener('click', finishTicket);
+            document.getElementById('cancelTicketButton').addEventListener('click', cancelTicket);
+            document.getElementById('redirectButton').addEventListener('click', redirectTicket);
+            document.getElementById('sendMessageButton').addEventListener('click', sendMessage);
+            document.getElementById('attachFileButton').addEventListener('click', () => document.getElementById('chatFileInput').click());
+            document.getElementById('chatFileInput').addEventListener('change', uploadChatFile);
+        }
+
+        async function callNextTicket() {
             try {
-                const response = await fetch(`${serverUrl}/call_ticket`, {
+                const response = await fetch(`${SERVER_URL}/api/operator/${operatorId}/call_next`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"}
                 });
                 const data = await response.json();
-                if (data.ticket) {
-                    document.getElementById("ticket_number").innerText = data.ticket;
+                if (response.ok) {
+                    currentCalledTicketNumber = data.ticket_number;
+                    document.getElementById("ticket_number").innerText = currentCalledTicketNumber;
                     updateTicketList();
-                } else if (data.error) {
-                    alert(data.error);
+                    loadChatHistory(currentCalledTicketNumber); // Load chat for the newly called ticket
+                    showNotification(`${translations.call_success || 'Талон вызван:'} ${currentCalledTicketNumber}`, 'info');
+                } else {
+                    showNotification(data.message || translations.error_calling_ticket || 'Ошибка вызова талона.', 'danger');
                 }
             } catch (error) {
                 console.error("Error calling ticket:", error);
-                alert(`${translations[currentLang].error_no_ticket}: ${error.message}`);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
             }
         }
 
         async function finishTicket() {
-            const ticket = document.getElementById("ticket_number").innerText;
-            if (ticket === translations[currentLang].none) {
-                alert(translations[currentLang].error_no_ticket);
+            if (!currentCalledTicketNumber) {
+                showNotification(translations.no_ticket_called || 'Нет вызванного талона для завершения.', 'danger');
                 return;
             }
             try {
-                const response = await fetch(`${serverUrl}/finish_ticket`, {
+                const response = await fetch(`${SERVER_URL}/api/operator/${operatorId}/finish_ticket`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({ticket: ticket})
+                    body: JSON.stringify({ticket: currentCalledTicketNumber})
                 });
                 const data = await response.json();
-                if (data.status === "ok") {
-                    document.getElementById("ticket_number").innerText = translations[currentLang].none;
+                if (response.ok) {
+                    showNotification(data.message || translations.finish_success || 'Талон завершен успешно.', 'info');
+                    currentCalledTicketNumber = null;
+                    document.getElementById("ticket_number").innerText = translations.none || 'Нет';
                     updateTicketList();
+                    document.getElementById('chat_box').innerHTML = ''; // Clear chat
                 } else {
-                    alert(data.error);
+                    showNotification(data.message || translations.error_finishing_ticket || 'Ошибка завершения талона.', 'danger');
                 }
             } catch (error) {
                 console.error("Error finishing ticket:", error);
-                alert(`${translations[currentLang].error_no_ticket}: ${error.message}`);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function cancelTicket() {
+            if (!currentCalledTicketNumber) {
+                showNotification(translations.no_ticket_called || 'Нет вызванного талона для отмены.', 'danger');
+                return;
+            }
+            try {
+                const response = await fetch(`${SERVER_URL}/api/operator/${operatorId}/cancel_ticket`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ticket: currentCalledTicketNumber})
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showNotification(data.message || translations.cancel_success || 'Талон отменен успешно.', 'info');
+                    currentCalledTicketNumber = null;
+                    document.getElementById("ticket_number").innerText = translations.none || 'Нет';
+                    updateTicketList();
+                    document.getElementById('chat_box').innerHTML = ''; // Clear chat
+                } else {
+                    showNotification(data.message || translations.error_cancelling_ticket || 'Ошибка отмены талона.', 'danger');
+                }
+            } catch (error) {
+                console.error("Error cancelling ticket:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
             }
         }
 
         async function redirectTicket() {
-            const ticket = document.getElementById("ticket_number").innerText;
-            const newOperatorId = document.getElementById("redirect_operator").value;
-            if (!newOperatorId) {
-                alert(translations[currentLang].error_no_operator);
+            if (!currentCalledTicketNumber) {
+                showNotification(translations.no_ticket_called || 'Нет вызванного талона для перенаправления.', 'danger');
                 return;
             }
-            if (ticket === translations[currentLang].none) {
-                alert(translations[currentLang].error_no_ticket);
+            const newServiceId = document.getElementById('redirect_service').value;
+            const newOperatorId = document.getElementById('redirect_operator').value; // Optional
+
+            if (!newServiceId) {
+                showNotification(translations.select_service_for_redirect || 'Пожалуйста, выберите услугу для перенаправления.', 'danger');
                 return;
             }
+
             try {
-                const response = await fetch(`${serverUrl}/redirect_ticket`, {
+                const response = await fetch(`${SERVER_URL}/api/operator/redirect_ticket`, {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({ticket: ticket, new_operator_id: newOperatorId})
+                    body: JSON.stringify({
+                        ticket_number: currentCalledTicketNumber,
+                        new_service_id: newServiceId,
+                        new_operator_id: newOperatorId || null // Send null if operator not selected
+                    })
                 });
                 const data = await response.json();
-                if (data.status === "ok") {
-                    document.getElementById("ticket_number").innerText = translations[currentLang].none;
+                if (response.ok) {
+                    showNotification(data.message || translations.redirect_success || 'Талон успешно перенаправлен.', 'info');
+                    currentCalledTicketNumber = null;
+                    document.getElementById("ticket_number").innerText = translations.none || 'Нет';
                     updateTicketList();
+                    document.getElementById('chat_box').innerHTML = ''; // Clear chat
                 } else {
-                    alert(data.error);
+                    showNotification(data.message || translations.error_redirecting_ticket || 'Ошибка перенаправления талона.', 'danger');
                 }
             } catch (error) {
                 console.error("Error redirecting ticket:", error);
-                alert(`${translations[currentLang].error_no_ticket}: ${error.message}`);
+                showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
             }
+        }
+
+        async function loadServicesForRedirect() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/services`);
+                if (!response.ok) throw new Error("Failed to fetch services");
+                const services = await response.json();
+                const serviceSelect = document.getElementById('redirect_service');
+                serviceSelect.innerHTML = `<option value="">${translations.select_service_for_redirect || '-- Выберите услугу для перенаправления --'}</option>`;
+                services.forEach(svc => {
+                    const option = document.createElement('option');
+                    option.value = svc.id;
+                    option.innerText = svc.name;
+                    serviceSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error loading services for redirect:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки услуг:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadOperatorsForRedirect() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/operators`);
+                if (!response.ok) throw new Error("Failed to fetch operators");
+                const operators = await response.json();
+                const operatorSelect = document.getElementById('redirect_operator');
+                operatorSelect.innerHTML = `<option value="">${translations.select_operator_for_redirect || '-- Выберите оператора (опционально) --'}</option>`;
+                operators.forEach(op => {
+                    // Exclude the current operator from the redirect list
+                    if (op.id !== operatorId) {
+                        const option = document.createElement('option');
+                        option.value = op.id;
+                        option.innerText = `${op.name} (${op.operator_number})`;
+                        operatorSelect.appendChild(option);
+                    }
+                });
+            } catch (error) {
+                console.error("Error loading operators for redirect:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки операторов:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function updateTicketList() {
+            try {
+                const response = await fetch(`${SERVER_URL}/operator/${operatorId}/tickets`);
+                if (!response.ok) throw new Error(`Failed to fetch tickets: ${response.status}`);
+                const tickets = await response.json();
+                const tableBody = document.querySelector("#ticketTable tbody");
+                tableBody.innerHTML = ''; // Clear existing rows
+
+                let foundCalledTicket = false;
+                tickets.forEach(ticket => {
+                    const row = document.createElement("tr");
+                    row.className = "border-b border-gray-200 dark:border-gray-600";
+                    if (ticket.status === "called") {
+                        row.classList.add("called-ticket");
+                        currentCalledTicketNumber = ticket.number; // Update the global variable
+                        document.getElementById("ticket_number").innerText = ticket.number;
+                        foundCalledTicket = true;
+                        // Join Socket.IO room for this ticket's chat
+                        socket.emit('join', { room: ticket.number });
+                        loadChatHistory(ticket.number); // Load chat for the active ticket
+                    }
+                    
+                    const createdAt = new Date(ticket.created_at + 'Z'); // Assume UTC from backend
+                    const formattedCreatedAt = createdAt.toLocaleString(currentLang.replace('_', '-'), {
+                        year: 'numeric', month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        hour12: false
+                    });
+
+                    row.innerHTML = `
+                        <td class="py-2 px-4">${ticket.number}</td>
+                        <td class="py-2 px-4">${ticket.service_name || 'N/A'}</td>
+                        <td class="py-2 px-4">${translations[ticket.status] || ticket.status}</td>
+                        <td class="py-2 px-4">${ticket.priority}</td>
+                        <td class="py-2 px-4">${formattedCreatedAt}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+                if (!foundCalledTicket) {
+                    currentCalledTicketNumber = null;
+                    document.getElementById("ticket_number").innerText = translations.none || 'Нет';
+                    document.getElementById('chat_box').innerHTML = ''; // Clear chat if no ticket is called
+                }
+
+                // Enable/disable redirect button based on whether a ticket is called
+                const redirectButton = document.getElementById("redirectButton");
+                redirectButton.disabled = !currentCalledTicketNumber;
+
+            } catch (error) {
+                console.error("Error updating ticket list:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка обновления списка талонов:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function setupChat() {
+            // Socket.IO event listener for incoming messages
+            socket.on('message', function(data) {
+                if (data.ticket_number === currentCalledTicketNumber) {
+                    addMessageToChatBox(data);
+                }
+            });
+        }
+
+        async function loadChatHistory(ticketNumber) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/chat_history/${ticketNumber}`);
+                if (!response.ok) throw new Error(`Failed to fetch chat history: ${response.status}`);
+                const messages = await response.json();
+                const chatBox = document.getElementById('chat_box');
+                chatBox.innerHTML = ''; // Clear existing messages
+                messages.forEach(msg => addMessageToChatBox(msg));
+                chatBox.scrollTop = chatBox.scrollHeight; // Scroll to bottom
+            } catch (error) {
+                console.error("Error loading chat history:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки истории чата:'} ${error.message}`, 'danger');
+            }
+        }
+
+        function addMessageToChatBox(message) {
+            const chatBox = document.getElementById('chat_box');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-message ${message.sender_type}`;
+
+            let contentHtml = '';
+            if (message.content) {
+                contentHtml += `<p>${message.content}</p>`;
+            }
+            if (message.file_url) {
+                if (message.file_type === 'image') {
+                    contentHtml += `<img src="${message.file_url}" alt="Image" class="mt-2">`;
+                } else if (message.file_type === 'video') {
+                    contentHtml += `<video controls src="${message.file_url}" class="mt-2"></video>`;
+                } else if (message.file_type === 'document') {
+                    contentHtml += `<a href="${message.file_url}" target="_blank" class="block mt-2">${translations.download_file || 'Скачать файл'}: ${message.file_url.split('/').pop()}</a>`;
+                }
+            }
+
+            const timestamp = new Date(message.created_at).toLocaleString(currentLang.replace('_', '-'));
+            msgDiv.innerHTML = `${contentHtml}<span class="timestamp">${timestamp}</span>`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight; // Scroll to bottom
         }
 
         async function sendMessage() {
             const content = document.getElementById("chat_message").value.trim();
-            if (!content) return;
-            try {
-                const response = await fetch(`${serverUrl}/send_message`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({content: content})
-                });
-                const data = await response.json();
-                if (data.status === "ok") {
-                    document.getElementById("chat_message").value = "";
-                }
-            } catch (error) {
-                console.error("Error sending message:", error);
-                alert(`Error sending message: ${error.message}`);
+            const fileInput = document.getElementById('chatFileInput');
+            const file = fileInput.files[0];
+            
+            if (!content && !file) {
+                showNotification(translations.empty_message_error || 'Сообщение не может быть пустым.', 'danger');
+                return;
             }
-        }
+            if (!currentCalledTicketNumber) {
+                showNotification(translations.no_ticket_called_chat || 'Выберите талон для отправки сообщения.', 'danger');
+                return;
+            }
 
-        socket.on('new_message', function(data) {
-            const chatBox = document.getElementById("chat_box");
-            const msgDiv = document.createElement("div");
-            msgDiv.innerText = `${data.operator_id}: ${data.content} (${data.timestamp})`;
-            chatBox.appendChild(msgDiv);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        });
+            let file_url = null;
+            let file_type = null;
 
-        async function updateTicketList() {
-            try {
-                const response = await fetch(`${serverUrl}/operator/${operatorId}/tickets`);
-                if (!response.ok) throw new Error(`Failed to fetch tickets: ${response.status}`);
-                const tickets = await response.json();
-                const table = document.getElementById("ticketTable");
-                table.innerHTML = `<tr><th>${translations[currentLang].tickets}</th><th>${translations[currentLang].status}</th></tr>`;
-                let found = false;
-                tickets.forEach(ticket => {
-                    const row = document.createElement("tr");
-                    if (ticket.status === "called") {
-                        row.classList.add("called-ticket");
-                        if (!found) {
-                            document.getElementById("ticket_number").innerText = ticket.number;
-                            found = true;
-                        }
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+                try {
+                    const uploadResponse = await fetch(`${SERVER_URL}/api/chat_upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const uploadData = await uploadResponse.json();
+                    if (uploadResponse.ok) {
+                        file_url = uploadData.file_url;
+                        file_type = uploadData.file_type;
+                    } else {
+                        showNotification(uploadData.error || translations.chat_file_upload_error || 'Ошибка загрузки файла.', 'danger');
+                        return;
                     }
-                    row.innerHTML = `<td>${ticket.number}</td><td>${ticket.status}</td>`;
-                    table.appendChild(row);
-                });
-                if (!found) {
-                    document.getElementById("ticket_number").innerText = translations[currentLang].none;
+                } catch (error) {
+                    console.error("Error uploading chat file:", error);
+                    showNotification(`${translations.error_fetch || 'Ошибка:'} ${error.message}`, 'danger');
+                    return;
                 }
-                // Update redirect button state
-                document.getElementById("redirectButton").disabled = !found;
-            } catch (error) {
-                console.error("Error updating ticket list:", error);
+            }
+
+            // Emit message via Socket.IO
+            socket.emit('message', {
+                ticket_number: currentCalledTicketNumber,
+                sender_type: 'operator',
+                sender_id: operatorId,
+                content: content,
+                file_url: file_url,
+                file_type: file_type
+            });
+
+            document.getElementById("chat_message").value = "";
+            fileInput.value = ''; // Clear file input
+        }
+
+        async function uploadChatFile() {
+            // This function is triggered when a file is selected.
+            // The actual upload happens when sendMessage is called.
+            // We just need to ensure the file input is ready.
+            const fileInput = document.getElementById('chatFileInput');
+            if (fileInput.files.length > 0) {
+                showNotification(`${translations.file_selected || 'Файл выбран:'} ${fileInput.files[0].name}`, 'info');
             }
         }
 
+        // Initial theme setup (from localStorage)
         if (localStorage.getItem("theme") === "dark") {
             document.body.classList.add("dark");
-            document.querySelector(".theme-toggle").innerText = "☀️";
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
         }
-
-        setLanguage("uz_lat");
-        updateTicketList();
-        setInterval(updateTicketList, 5000);
     </script>
 </body>
 </html>

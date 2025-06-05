@@ -3,11 +3,15 @@ from flask import Flask, jsonify, request, render_template, redirect, url_for, s
 from flask_socketio import SocketIO, emit, join_room
 from flask_cors import CORS
 from flask_session import Session
-import sqlite3
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_restx import Api, Resource, fields
+from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, DateTime, Text
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from sqlalchemy.sql import func
 from datetime import datetime, timedelta
 import secrets
 import logging
-import getpass
 from dotenv import load_dotenv
 import qrcode
 from PIL import Image
@@ -15,1591 +19,2325 @@ import uuid
 import pandas as pd
 from io import BytesIO
 from werkzeug.utils import secure_filename
-import base64
 from werkzeug.security import generate_password_hash, check_password_hash
+from slugify import slugify
+import pytz
+from urllib.parse import urlparse
+import json
+import requests
+from celery import Celery
+import functools
 
-# Load environment variables
+# --- Configuration and Initialization ---
+
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", secrets.token_hex(16))
+app.secret_key = os.getenv("SECRET_KEY", secrets.token_hex(32))
 app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_FILE_DIR"] = os.path.join(os.getcwd(), 'flask_session_data')
+app.config["SESSION_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 Session(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
-CORS(app)
 
-# Configuration from .env
-SERVER_URL = os.getenv("SERVER_URL", "http://localhost:5000")
-DB_PATH = os.getenv("DB_PATH", "regoffice.db")
-UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "static/uploads")
-ALLOWED_EXTENSIONS = {'mp4', 'jpg', 'jpeg', 'png'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    filename=os.getenv("LOG_FILE", "app.log"),
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    encoding='utf-8'
+# CORS configuration
+CORS(app, resources={r"/api/*": {"origins": os.getenv("TRUSTED_ORIGIN", "http://172.16.1.28:5000")}}, supports_credentials=True)
+
+# Socket.IO initialization
+socketio = SocketIO(app, cors_allowed_origins=os.getenv("TRUSTED_ORIGIN", "http://172.16.1.28:5000"), manage_session=False)
+
+# Database configuration (PostgreSQL)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/regoffice")
+engine = create_engine(DATABASE_URL, pool_size=20, max_overflow=0)
+Base = declarative_base()
+SessionLocal = sessionmaker(bind=engine)
+
+# Media folder
+MEDIA_FOLDER = 'static/uploads'
+os.makedirs(MEDIA_FOLDER, exist_ok=True)
+
+# Server URL
+SERVER_URL = os.getenv("SERVER_URL", "http://127.0.0.1:5000")
+PARSED_SERVER_URL = urlparse(SERVER_URL)
+BASE_URL_FOR_QR = f"{PARSED_SERVER_URL.scheme}://{PARSED_SERVER_URL.netloc}"
+
+# Timezone
+UZBEKISTAN_TIMEZONE = pytz.timezone('Asia/Tashkent')
+
+# Celery configuration
+app.config['CELERY_BROKER_URL'] = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+app.config['CELERY_RESULT_BACKEND'] = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
+celery.conf.update(app.config)
+
+# Rate limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
 )
 
-def allowed_file(filename):
-    """Check if the file extension is allowed."""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# Swagger API
+api = Api(app, version='1.0', title='Queue Management API', description='API for managing queue system')
 
+# --- Database Models ---
+
+class Category(Base):
+    __tablename__ = 'categories'
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    subcategories = relationship("Subcategory", back_populates="category")
+    services = relationship("Service", back_populates="category")
+
+class Subcategory(Base):
+    __tablename__ = 'subcategories'
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey('categories.id'), nullable=False)
+    category = relationship("Category", back_populates="subcategories")
+    services = relationship("Service", back_populates="subcategory")
+
+class Service(Base):
+    __tablename__ = 'services'
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey('categories.id'), nullable=False)
+    subcategory_id = Column(Integer, ForeignKey('subcategories.id'), nullable=True)
+    estimated_time = Column(Integer)
+    category = relationship("Category", back_populates="services")
+    subcategory = relationship("Subcategory", back_populates="services")
+    tickets = relationship("Ticket", back_populates="service")
+
+class Ticket(Base):
+    __tablename__ = 'tickets'
+    id = Column(Integer, primary_key=True)
+    number = Column(String, nullable=False, unique=True)
+    service_id = Column(Integer, ForeignKey('services.id'), nullable=False)
+    client_telegram_chat_id = Column(String)
+    status = Column(String, nullable=False, default='waiting')
+    operator_id = Column(Integer, ForeignKey('operators.id'))
+    created_at = Column(DateTime, default=func.now())
+    called_at = Column(DateTime)
+    finished_at = Column(DateTime)
+    redirected_from_ticket_id = Column(Integer, ForeignKey('tickets.id'))
+    priority = Column(Integer, default=0)
+    service = relationship("Service", back_populates="tickets")
+    operator = relationship("Operator")
+
+class Operator(Base):
+    __tablename__ = 'operators'
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    operator_number = Column(String, nullable=False, unique=True)
+    password_hash = Column(String, nullable=False)
+    telegram_chat_id = Column(String, unique=True)
+    theme_preference = Column(String, default='light')
+
+class OperatorServiceAssignment(Base):
+    __tablename__ = 'operator_service_assignments'
+    operator_id = Column(Integer, ForeignKey('operators.id'), primary_key=True)
+    service_id = Column(Integer, ForeignKey('services.id'), primary_key=True)
+
+class Admin(Base):
+    __tablename__ = 'admins'
+    id = Column(Integer, primary_key=True)
+    username = Column(String, nullable=False, unique=True)
+    password_hash = Column(String, nullable=False)
+    theme_preference = Column(String, default='light')
+
+class DailyStatistics(Base):
+    __tablename__ = 'daily_statistics'
+    id = Column(Integer, primary_key=True)
+    date = Column(String, nullable=False, unique=True)
+    total_tickets = Column(Integer, default=0)
+    finished_tickets = Column(Integer, default=0)
+    cancelled_tickets = Column(Integer, default=0)
+    redirected_tickets = Column(Integer, default=0)
+    avg_wait_time = Column(Float, default=0)
+    avg_service_time = Column(Float, default=0)
+
+class OperatorStatistics(Base):
+    __tablename__ = 'operator_statistics'
+    id = Column(Integer, primary_key=True)
+    operator_id = Column(Integer, ForeignKey('operators.id'), nullable=False)
+    date = Column(String, nullable=False)
+    called_tickets = Column(Integer, default=0)
+    finished_tickets = Column(Integer, default=0)
+    cancelled_tickets = Column(Integer, default=0)
+    redirected_tickets = Column(Integer, default=0)
+    avg_wait_time = Column(Float, default=0)
+    avg_service_time = Column(Float, default=0)
+
+class ServiceStatistics(Base):
+    __tablename__ = 'service_statistics'
+    id = Column(Integer, primary_key=True)
+    service_id = Column(Integer, ForeignKey('services.id'), nullable=False)
+    date = Column(String, nullable=False)
+    called_tickets = Column(Integer, default=0)
+    finished_tickets = Column(Integer, default=0)
+    cancelled_tickets = Column(Integer, default=0)
+    redirected_tickets = Column(Integer, default=0)
+    avg_wait_time = Column(Float, default=0)
+    avg_service_time = Column(Float, default=0)
+
+class MediaFile(Base):
+    __tablename__ = 'media_files'
+    id = Column(Integer, primary_key=True)
+    filename = Column(String, nullable=False, unique=True)
+    filepath = Column(String, nullable=False)
+    file_type = Column(String, nullable=False)
+    uploaded_at = Column(DateTime, default=func.now())
+
+class Language(Base):
+    __tablename__ = 'languages'
+    id = Column(Integer, primary_key=True)
+    lang_code = Column(String, nullable=False, unique=True)
+    display_name = Column(String, nullable=False)
+
+class Webhook(Base):
+    __tablename__ = 'webhooks'
+    id = Column(Integer, primary_key=True)
+    event_type = Column(String, nullable=False)
+    url = Column(String, nullable=False)
+
+class ChatMessage(Base):
+    __tablename__ = 'chat_messages'
+    id = Column(Integer, primary_key=True)
+    ticket_number = Column(String, ForeignKey('tickets.number'), nullable=False)
+    sender_type = Column(String, nullable=False)
+    sender_id = Column(String)
+    content = Column(Text)
+    file_url = Column(String)
+    file_type = Column(String)
+    created_at = Column(DateTime, default=func.now())
+
+# Initialize database
 def init_db():
-    """Initialize the SQLite database and create tables if they don't exist."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        # Categories with color support
-        c.execute('''CREATE TABLE IF NOT EXISTS categories (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     name TEXT NOT NULL,
-                     parent_id INTEGER,
-                     color TEXT DEFAULT '#FFFFFF',
-                     FOREIGN KEY(parent_id) REFERENCES categories(id))''')
-        # Services with color support
-        c.execute('''CREATE TABLE IF NOT EXISTS services (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     name TEXT NOT NULL,
-                     category_id INTEGER NOT NULL,
-                     color TEXT DEFAULT '#FFFFFF',
-                     FOREIGN KEY(category_id) REFERENCES categories(id))''')
-        # Operators
-        c.execute('''CREATE TABLE IF NOT EXISTS operators (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     name TEXT NOT NULL,
-                     hashed_password TEXT NOT NULL,
-                     status TEXT DEFAULT 'active',
-                     operator_number INTEGER UNIQUE)''')
-        # Operator-Service mappings
-        c.execute('''CREATE TABLE IF NOT EXISTS operator_services (
-                     operator_id INTEGER,
-                     service_id INTEGER,
-                     PRIMARY KEY (operator_id, service_id),
-                     FOREIGN KEY(operator_id) REFERENCES operators(id) ON DELETE CASCADE,
-                     FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE CASCADE)''')
-        # Tickets
-        c.execute('''CREATE TABLE IF NOT EXISTS tickets (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     number TEXT NOT NULL UNIQUE,
-                     service_id INTEGER NOT NULL,
-                     status TEXT NOT NULL,
-                     operator_id INTEGER,
-                     created_at TEXT NOT NULL,
-                     finished_at TEXT,
-                     kiosk_id INTEGER NOT NULL,
-                     FOREIGN KEY(service_id) REFERENCES services(id),
-                     FOREIGN KEY(operator_id) REFERENCES operators(id))''')
-        # Messages
-        c.execute('''CREATE TABLE IF NOT EXISTS messages (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     operator_id INTEGER,
-                     content TEXT NOT NULL,
-                     timestamp TEXT NOT NULL,
-                     FOREIGN KEY(operator_id) REFERENCES operators(id))''')
-        # Admin users
-        c.execute('''CREATE TABLE IF NOT EXISTS admin_users (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     username TEXT UNIQUE NOT NULL,
-                     hashed_password TEXT NOT NULL)''')
-        # Evaluations
-        c.execute('''CREATE TABLE IF NOT EXISTS evaluations (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     ticket_number TEXT NOT NULL,
-                     operator_id INTEGER,
-                     rating INTEGER CHECK(rating >= 1 AND rating <= 5),
-                     comment TEXT,
-                     created_at TEXT NOT NULL,
-                     FOREIGN KEY(ticket_number) REFERENCES tickets(number),
-                     FOREIGN KEY(operator_id) REFERENCES operators(id))''')
-        # Disputes
-        c.execute('''CREATE TABLE IF NOT EXISTS disputes (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     ticket_number TEXT NOT NULL,
-                     operator_id INTEGER,
-                     comment TEXT NOT NULL,
-                     created_at TEXT NOT NULL,
-                     status TEXT NOT NULL,
-                     FOREIGN KEY(ticket_number) REFERENCES tickets(number),
-                     FOREIGN KEY(operator_id) REFERENCES operators(id))''')
-        # Chats
-        c.execute('''CREATE TABLE IF NOT EXISTS chats (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     ticket_number TEXT NOT NULL,
-                     sender_type TEXT NOT NULL,
-                     sender_id INTEGER,
-                     content TEXT NOT NULL,
-                     timestamp TEXT NOT NULL,
-                     FOREIGN KEY(ticket_number) REFERENCES tickets(number))''')
-        # Media
-        c.execute('''CREATE TABLE IF NOT EXISTS media (
-                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                     type TEXT NOT NULL CHECK(type IN ('image', 'video')),
-                     filename TEXT NOT NULL UNIQUE,
-                     original_filename TEXT,
-                     title TEXT,
-                     description TEXT,
-                     display_order INTEGER DEFAULT 0,
-                     is_active INTEGER DEFAULT 0,
-                     duration INTEGER,
-                     created_at TEXT NOT NULL,
-                     uploaded_by INTEGER,
-                     FOREIGN KEY(uploaded_by) REFERENCES admin_users(id))''')
+    Base.metadata.create_all(engine)
+    db_session = SessionLocal()
+    try:
+        admin_count = db_session.query(Admin).count()
+        if admin_count == 0:
+            print("\n=== Admin Setup ===")
+            while True:
+                username = input("Enter admin username: ").strip()
+                if not username:
+                    print("Username cannot be empty.")
+                    continue
+                password = input("Enter admin password: ").strip()
+                if not password:
+                    print("Password cannot be empty.")
+                    continue
+                confirm = input("Confirm password: ").strip()
+                if password != confirm:
+                    print("Passwords do not match.")
+                    continue
+                break
+            hashed_password = generate_password_hash(password)
+            admin = Admin(username=username, password_hash=hashed_password)
+            db_session.add(admin)
+            db_session.commit()
+            print(f"Admin '{username}' created successfully!\n")
+    finally:
+        db_session.close()
 
-        # Create default admin user if none exists
-        c.execute("SELECT COUNT(*) FROM admin_users")
-        if c.fetchone()[0] == 0:
-            username = input("Enter admin username: ")
-            password = getpass.getpass("Enter admin password: ")
-            hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-            c.execute("INSERT INTO admin_users (username, hashed_password) VALUES (?, ?)",
-                      (username, hashed_password))
-            logging.info(f"Created admin user: {username}")
+# --- Helper Functions ---
 
-        # Ensure indexes for performance
-        c.execute("CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_tickets_service_id ON tickets(service_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_tickets_operator_id ON tickets(operator_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_media_is_active ON media(is_active)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_media_display_order ON media(display_order)")
+def generate_ticket_number(category_id, subcategory_id, db_session):
+    date_str = get_current_tashkent_time().strftime('%Y-%m-%d')
+    count = db_session.query(Ticket).filter(
+        Ticket.created_at >= date_str,
+        Ticket.service_id.in_(
+            db_session.query(Service.id).filter(
+                Service.category_id == category_id,
+                Service.subcategory_id == subcategory_id
+            )
+        )
+    ).count() + 1
+    return f"{category_id}-{subcategory_id or '0'}-{count:04d}"
 
-        conn.commit()
+@celery.task
+def send_telegram_message_async(chat_id, message_text):
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        logging.error("TELEGRAM_BOT_TOKEN not set.")
+        return False, "Telegram bot token not configured."
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {'chat_id': chat_id, 'text': message_text, 'parse_mode': 'HTML'}
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+        logging.info(f"Telegram message sent to {chat_id}: {message_text}")
+        return True, "Message sent successfully."
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error sending Telegram message to {chat_id}: {e}")
+        return False, f"Failed to send message: {e}"
 
-# Decorators
-def login_required(f):
-    """Require operator login for protected routes."""
-    from functools import wraps
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'operator_id' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
+def get_current_tashkent_time():
+    return datetime.now(UZBEKISTAN_TIMEZONE)
+
+def load_translations_from_file():
+    try:
+        with open('translations.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logging.error("translations.json not found.")
+        return {}
+
+def trigger_webhook(event_type, payload):
+    db_session = SessionLocal()
+    try:
+        webhooks = db_session.query(Webhook).filter(Webhook.event_type == event_type).all()
+        for webhook in webhooks:
+            try:
+                response = requests.post(webhook.url, json=payload, timeout=5)
+                response.raise_for_status()
+                logging.info(f"Webhook for '{event_type}' sent to {webhook.url} successfully.")
+            except requests.exceptions.RequestException as e:
+                logging.error(f"Failed to send webhook for '{event_type}' to {webhook.url}: {e}")
+    finally:
+        db_session.close()
+
+def update_statistics(date, operator_id=None, service_id=None, called_tickets=0, finished_tickets=0, cancelled_tickets=0, redirected_tickets=0, wait_time=0, service_time=0):
+    db_session = SessionLocal()
+    try:
+        daily_stat = db_session.query(DailyStatistics).filter(DailyStatistics.date == date).first()
+        if not daily_stat:
+            daily_stat = DailyStatistics(date=date)
+            db_session.add(daily_stat)
+        daily_stat.total_tickets += (called_tickets + finished_tickets + cancelled_tickets + redirected_tickets)
+        daily_stat.finished_tickets += finished_tickets
+        daily_stat.cancelled_tickets += cancelled_tickets
+        daily_stat.redirected_tickets += redirected_tickets
+        if called_tickets:
+            daily_stat.avg_wait_time = ((daily_stat.avg_wait_time * (daily_stat.called_tickets or 1)) + wait_time) / (daily_stat.called_tickets + called_tickets or 1)
+        if finished_tickets:
+            daily_stat.avg_service_time = ((daily_stat.avg_service_time * (daily_stat.finished_tickets or 1)) + service_time) / (daily_stat.finished_tickets + finished_tickets or 1)
+        daily_stat.called_tickets = (daily_stat.called_tickets or 0) + called_tickets
+
+        if operator_id:
+            op_stat = db_session.query(OperatorStatistics).filter(OperatorStatistics.operator_id == operator_id, OperatorStatistics.date == date).first()
+            if not op_stat:
+                op_stat = OperatorStatistics(operator_id=operator_id, date=date)
+                db_session.add(op_stat)
+            op_stat.called_tickets += called_tickets
+            op_stat.finished_tickets += finished_tickets
+            op_stat.cancelled_tickets += cancelled_tickets
+            op_stat.redirected_tickets += redirected_tickets
+            if called_tickets:
+                op_stat.avg_wait_time = ((op_stat.avg_wait_time * (op_stat.called_tickets or 1)) + wait_time) / (op_stat.called_tickets + called_tickets or 1)
+            if finished_tickets:
+                op_stat.avg_service_time = ((op_stat.avg_service_time * (op_stat.finished_tickets or 1)) + service_time) / (op_stat.finished_tickets + finished_tickets or 1)
+
+        if service_id:
+            svc_stat = db_session.query(ServiceStatistics).filter(ServiceStatistics.service_id == service_id, ServiceStatistics.date == date).first()
+            if not svc_stat:
+                svc_stat = ServiceStatistics(service_id=service_id, date=date)
+                db_session.add(svc_stat)
+            svc_stat.called_tickets += called_tickets
+            svc_stat.finished_tickets += finished_tickets
+            svc_stat.cancelled_tickets += cancelled_tickets
+            svc_stat.redirected_tickets += redirected_tickets
+            if called_tickets:
+                svc_stat.avg_wait_time = ((svc_stat.avg_wait_time * (svc_stat.called_tickets or 1)) + wait_time) / (svc_stat.called_tickets + called_tickets or 1)
+            if finished_tickets:
+                svc_stat.avg_service_time = ((svc_stat.avg_service_time * (svc_stat.finished_tickets or 1)) + service_time) / (svc_stat.finished_tickets + finished_tickets or 1)
+
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        logging.error(f"Error updating statistics for date {date}: {e}")
+    finally:
+        db_session.close()
+
+# --- Authentication Decorators ---
 
 def admin_required(f):
-    """Require admin login for protected routes."""
-    from functools import wraps
-    @wraps(f)
+    @functools.wraps(f)
     def decorated_function(*args, **kwargs):
         if 'admin_id' not in session:
+            logging.warning("Unauthorized admin access attempt.")
             return redirect(url_for('admin_login'))
         return f(*args, **kwargs)
     return decorated_function
 
-def get_category_depth(category_id):
-    """Calculate the depth of a category in the hierarchy."""
-    if not category_id:
-        return 0
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        depth = 0
-        current_id = category_id
-        while current_id:
-            c.execute("SELECT parent_id FROM categories WHERE id = ?", (current_id,))
-            result = c.fetchone()
-            if not result or not result[0]:
-                break
-            current_id = result[0]
-            depth += 1
-            if depth >= 10:  # Prevent infinite loops
-                return 10
-        return depth
+def operator_required(f):
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'operator_id' not in session:
+            logging.warning("Unauthorized operator access attempt.")
+            return redirect(url_for('operator_login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
-# Routes
+# --- Error Handlers ---
+
+@app.errorhandler(400)
+def bad_request(e):
+    return jsonify({"error": str(e)}), 400
+
+@app.errorhandler(401)
+def unauthorized(e):
+    return jsonify({"error": "Unauthorized access"}), 401
+
+@app.errorhandler(403)
+def forbidden(e):
+    return jsonify({"error": "Forbidden"}), 403
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "Resource not found"}), 404
+
+@app.errorhandler(500)
+def internal_error(e):
+    logging.error(f"Internal server error: {e}")
+    return jsonify({"error": "Internal server error"}), 500
+
+# --- Routes ---
+
 @app.route('/')
 def index():
-    """Render the main kiosk interface."""
-    return render_template('index.html', server_url=SERVER_URL)
+    return render_template('index.html', SERVER_URL=SERVER_URL)
 
-@app.route('/categories', methods=['GET'])
-def get_categories():
-    """Fetch top-level categories with colors."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, name, color FROM categories WHERE parent_id IS NULL ORDER BY name")
-        categories = [{"id": row[0], "name": row[1], "type": "category", "color": row[2]} for row in c.fetchall()]
-        logging.info(f"Fetched {len(categories)} top-level categories")
-        return jsonify(categories)
+@app.route('/operator_login')
+@limiter.limit("10 per minute")
+def operator_login():
+    return render_template('login.html', SERVER_URL=SERVER_URL)
 
-@app.route('/services/<int:category_id>', methods=['GET'])
-def get_services(category_id):
-    """Fetch services and subcategories for a given category, including nested subcategories."""
-    page = request.args.get('page', 1, type=int)
-    per_page = 10
-    offset = (page - 1) * per_page
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        # Fetch subcategories
-        c.execute("SELECT id, name, color FROM categories WHERE parent_id = ? ORDER BY name LIMIT ? OFFSET ?",
-                  (category_id, per_page, offset))
-        subcategories = [{"id": row[0], "name": row[1], "type": "subcategory", "color": row[2]} for row in c.fetchall()]
-        c.execute("SELECT COUNT(*) FROM categories WHERE parent_id = ?", (category_id,))
-        total_subcategories = c.fetchone()[0]
-        # Fetch services
-        c.execute("SELECT id, name, color FROM services WHERE category_id = ? ORDER BY name LIMIT ? OFFSET ?",
-                  (category_id, per_page, offset))
-        services = [{"id": row[0], "name": row[1], "type": "service", "color": row[2]} for row in c.fetchall()]
-        c.execute("SELECT COUNT(*) FROM services WHERE category_id = ?", (category_id,))
-        total_services = c.fetchone()[0]
-        # Fetch nested subcategory tree
-        def get_subcategory_tree(cat_id):
-            c.execute("SELECT id, name, color FROM categories WHERE parent_id = ? ORDER BY name", (cat_id,))
-            subs = [{"id": row[0], "name": row[1], "type": "subcategory", "color": row[2],
-                     "subcategories": get_subcategory_tree(row[0])} for row in c.fetchall()]
-            return subs
-        subcategory_tree = get_subcategory_tree(category_id)
-        items = subcategories + services
-        total = total_subcategories + total_services
-        logging.info(f"Fetched {len(items)} items for category {category_id}, page {page}")
-        return jsonify({
-            "items": items,
-            "subcategory_tree": subcategory_tree,
-            "total": total,
-            "page": page,
-            "per_page": per_page
-        })
-
-@app.route('/get_ticket', methods=['POST'])
-def get_ticket():
-    """Generate a new ticket for a service."""
-    data = request.get_json() or {}
-    service_id = data.get('service_id', type=int)
-    lang = data.get('lang', 'uz_lat')
-    kiosk_id = data.get('kiosk_id', 1, type=int)
-    if not service_id:
-        return jsonify({"error": "Service ID is required"}), 400
-    logging.info(f"Requesting ticket: service_id={service_id}, lang={lang}, kiosk_id={kiosk_id}")
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT name, category_id FROM services WHERE id = ?", (service_id,))
-        service = c.fetchone()
-        if not service:
-            logging.error(f"Service {service_id} not found")
-            return jsonify({"error": "Service not found"}), 404
-        service_name = service[0]
-        # Generate ticket number
-        c.execute("SELECT COUNT(*) FROM tickets WHERE service_id = ? AND DATE(created_at) = DATE('now')",
-                  (service_id,))
-        count = c.fetchone()[0] + 1
-        ticket_number = f"{service_id:02d}-{count:03d}"
-        # Estimate wait time
-        c.execute("SELECT AVG(strftime('%s', finished_at) - strftime('%s', created_at)) / 60.0 "
-                  "FROM tickets WHERE service_id = ? AND finished_at IS NOT NULL", (service_id,))
-        avg_time = c.fetchone()[0] or 5.0
-        wait_time = round(avg_time * count)
-        # Assign operator
-        c.execute("SELECT operator_id FROM operator_services WHERE service_id = ? LIMIT 1", (service_id,))
-        operator = c.fetchone()
-        operator_id = operator[0] if operator else None
-        operator_name = None
-        operator_number = None
-        if operator_id:
-            c.execute("SELECT name, operator_number FROM operators WHERE id = ?", (operator_id,))
-            op_data = c.fetchone()
-            if op_data:
-                operator_name = op_data[0]
-                operator_number = op_data[1]
-        created_at = datetime.now().isoformat()
-        c.execute("INSERT INTO tickets (number, service_id, status, operator_id, created_at, kiosk_id) "
-                  "VALUES (?, ?, 'waiting', ?, ?, ?)",
-                  (ticket_number, service_id, operator_id, created_at, kiosk_id))
-        ticket_id = c.lastrowid
-        conn.commit()
-        # Generate QR code
-        status_url = f"{SERVER_URL}/ticket/{ticket_number}"
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
-        qr.add_data(status_url)
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        buffered = BytesIO()
-        qr_img.save(buffered, format="PNG")
-        qr_data = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        socketio.emit('new_ticket', {'ticket': ticket_number, 'service_id': service_id, 'operator_id': operator_id})
-        logging.info(f"Created ticket: {ticket_number}, service_id: {service_id}, operator_id: {operator_id or 'None'}")
-        return jsonify({
-            "ticket": ticket_number,
-            "ticket_id": ticket_id,
-            "wait_time": wait_time,
-            "service_name": service_name,
-            "operator_id": operator_id,
-            "operator_name": operator_name,
-            "operator_number": operator_number,
-            "created_at": created_at,
-            "status_url": status_url,
-            "qr_data": qr_data
-        })
-
-@app.route('/print_ticket', methods=['POST'])
-def print_ticket():
-    """Generate HTML for browser-based ticket printing."""
-    data = request.get_json() or {}
-    ticket_number = data.get('ticket_number')
-    if not ticket_number:
-        return jsonify({"error": "Ticket number is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("""
-            SELECT t.number, t.created_at, s.name, o.name, o.operator_number
-            FROM tickets t
-            LEFT JOIN services s ON t.service_id = s.id
-            LEFT JOIN operators o ON t.operator_id = o.id
-            WHERE t.number = ?
-        """, (ticket_number,))
-        ticket = c.fetchone()
-        if not ticket:
-            logging.error(f"Ticket {ticket_number} not found for printing")
-            return jsonify({"error": "Ticket not found"}), 404
-        ticket_data = {
-            "number": ticket[0],
-            "created_at": ticket[1],
-            "service_name": ticket[2],
-            "operator_name": ticket[3],
-            "operator_number": ticket[4]
-        }
-        return render_template('print_ticket.html', ticket=ticket_data, server_url=SERVER_URL)
-
-@app.route('/ticket_status/<ticket_number>', methods=['GET'])
-def ticket_status():
-    """Get the status of a specific ticket."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("""
-            SELECT t.id, t.number, t.service_id, t.status, t.operator_id, t.created_at,
-                   s.name AS service_name, o.name AS operator_name, o.operator_number
-            FROM tickets t
-            LEFT JOIN services s ON t.service_id = s.id
-            LEFT JOIN operators o ON t.operator_id = o.id
-            WHERE t.number = ?
-        """, (ticket_number,))
-        ticket = c.fetchone()
-        if not ticket:
-            logging.error(f"Ticket {ticket_number} not found")
-            return jsonify({"error": "Ticket not found"}), 404
-        c.execute("""
-            SELECT COUNT(*) FROM tickets
-            WHERE service_id = ? AND status = 'waiting' AND created_at <= ?
-        """, (ticket[2], ticket[5]))
-        position = c.fetchone()[0] if ticket[3] == 'waiting' else 0
-        c.execute("""
-            SELECT AVG(strftime('%s', finished_at) - strftime('%s', created_at)) / 60.0
-            FROM tickets WHERE service_id = ? AND finished_at IS NOT NULL
-        """, (ticket[2],))
-        avg_time = c.fetchone()[0] or 5.0
-        wait_time = round(avg_time * position) if position > 0 else 0
-        return jsonify({
-            "ticket_id": ticket[0],
-            "ticket_number": ticket[1],
-            "service_name": ticket[6],
-            "status": ticket[3],
-            "operator_name": ticket[7],
-            "operator_number": ticket[8],
-            "position": position,
-            "wait_time": wait_time
-        })
-
-@app.route('/ticket/<ticket_number>')
-def ticket_page():
-    """Render the ticket status page."""
-    return render_template('ticket_status.html', ticket_number=ticket_number, server_url=SERVER_URL)
-
-@app.route('/dispute/<ticket_number>', methods=['GET', 'POST'])
-def dispute():
-    """Handle dispute filing for a ticket."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, operator_id FROM tickets WHERE number = ?", (ticket_number,))
-        ticket = c.fetchone()
-        if not ticket:
-            return render_template('error.html', message="Ticket not found", server_url=SERVER_URL), 404
-        if request.method == 'POST':
-            comment = request.form.get('comment')
-            if not comment:
-                return render_template('dispute.html', ticket_number=ticket_number,
-                                       error="Comment is required", server_url=SERVER_URL), 400
-            created_at = datetime.now().isoformat()
-            c.execute("INSERT INTO disputes (ticket_number, operator_id, comment, created_at, status) "
-                      "VALUES (?, ?, ?, ?, 'open')",
-                      (ticket_number, ticket[1], comment, created_at))
-            conn.commit()
-            logging.info(f"Dispute filed for ticket {ticket_number}")
-            return redirect(url_for('ticket_page', ticket_number=ticket_number))
-        return render_template('dispute.html', ticket_number=ticket_number, server_url=SERVER_URL)
-
-@app.route('/submit_feedback', methods=['POST'])
-def submit_feedback():
-    """Submit feedback for a ticket."""
-    ticket_id = request.form.get('ticket_id', type=int)
-    rating = request.form.get('rating', type=int)
-    comment = request.form.get('comment')
-    if not ticket_id or not rating or rating < 1 or rating > 5:
-        return jsonify({"error": "Valid ticket ID and rating (1-5) are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT number, operator_id FROM tickets WHERE id = ?", (ticket_id,))
-        ticket = c.fetchone()
-        if not ticket:
-            return jsonify({"error": "Ticket not found"}), 404
-        ticket_number, operator_id = ticket
-        created_at = datetime.now().isoformat()
-        c.execute("INSERT INTO evaluations (ticket_number, operator_id, rating, comment, created_at) "
-                  "VALUES (?, ?, ?, ?, ?)",
-                  (ticket_number, operator_id, rating, comment, created_at))
-        conn.commit()
-        logging.info(f"Feedback submitted for ticket {ticket_number}: rating={rating}")
-        return redirect(url_for('ticket_page', ticket_number=ticket_number))
-
-@app.route('/chat/<ticket_number>')
-def chat():
-    """Render the chat interface for a ticket."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id FROM tickets WHERE number = ?", (ticket_number,))
-        ticket = c.fetchone()
-        if not ticket:
-            return render_template('error.html', message="Invalid ticket", server_url=SERVER_URL), 404
-        return render_template('chat.html', ticket_id=ticket[0], ticket_number=ticket_number,
-                               server_url=SERVER_URL)
-
-@app.route('/api/admin/statistics/data', methods=['GET'])
-@admin_required
-def statistics_data():
-    """Fetch detailed statistics for services, categories, or operators."""
-    view_type = request.args.get('view_type')  # 'service', 'category', 'operator_overall', 'operator_individual'
-    service_id = request.args.get('service_id', type=int)
-    category_id = request.args.get('category_id', type=int)
-    operator_id = request.args.get('operator_id', type=int)
-    time_filter = request.args.get('time_filter')  # 'daily', 'monthly', 'half_yearly', 'yearly', 'custom'
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-
-    if time_filter == 'custom' and (not start_date or not end_date):
-        return jsonify({"status": "error", "message": "Custom date range requires start_date and end_date"}), 400
-
-    # Determine date range
-    if time_filter != 'custom':
-        end_date = datetime.now().isoformat()
-        if time_filter == 'daily':
-            start_date = (datetime.now() - timedelta(days=1)).isoformat()
-        elif time_filter == 'monthly':
-            start_date = (datetime.now() - timedelta(days=30)).isoformat()
-        elif time_filter == 'half_yearly':
-            start_date = (datetime.now() - timedelta(days=180)).isoformat()
-        elif time_filter == 'yearly':
-            start_date = (datetime.now() - timedelta(days=365)).isoformat()
-        else:
-            return jsonify({"status": "error", "message": "Invalid time filter"}), 400
-
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        # Base query for table data
-        query = """
-            SELECT
-                t.number,
-                s.name AS service_name,
-                c.name AS category_name,
-                o.name AS operator_name,
-                o.operator_number,
-                t.status,
-                t.created_at,
-                t.finished_at,
-                (strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0 AS service_time
-            FROM tickets t
-            JOIN services s ON t.service_id = s.id
-            JOIN categories c ON s.category_id = c.id
-            LEFT JOIN operators o ON t.operator_id = o.id
-            WHERE t.created_at BETWEEN ? AND ?
-        """
-        params = [start_date, end_date]
-        if service_id:
-            query += " AND t.service_id = ?"
-            params.append(service_id)
-        if category_id:
-            query += " AND s.category_id = ?"
-            params.append(category_id)
-        if operator_id and view_type == 'operator_individual':
-            query += " AND t.operator_id = ?"
-            params.append(operator_id)
-
-        c.execute(query, params)
-        df = pd.DataFrame(c.fetchall(), columns=[
-            'Ticket Number', 'Service Name', 'Category Name', 'Operator Name',
-            'Operator Number', 'Status', 'Created At', 'Finished At', 'Service Time'
-        ])
-
-        # Chart data based on view_type
-        chart_data = []
-        group_time = {
-            'daily': "strftime('%Y-%m-%d', t.created_at)",
-            'monthly': "strftime('%Y-%m', t.created_at)",
-            'half_yearly': "strftime('%Y-' || (CASE WHEN strftime('%m', t.created_at) <= '06' THEN 'H1' ELSE 'H2' END), t.created_at)",
-            'yearly': "strftime('%Y', t.created_at)"
-        }.get(time_filter, "strftime('%Y-%m', t.created_at)")
-
-        if view_type == 'service' and service_id:
-            c.execute(f"""
-                SELECT
-                    {group_time} AS time_period,
-                    s.name AS service_name,
-                    c.name AS category_name,
-                    COUNT(t.id) AS ticket_count,
-                    AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-                FROM tickets t
-                JOIN services s ON t.service_id = s.id
-                JOIN categories c ON s.category_id = c.id
-                WHERE t.created_at BETWEEN ? AND ? AND t.service_id = ?
-                GROUP BY time_period, s.id
-            """, (start_date, end_date, service_id))
-            chart_data = c.fetchall()
-        elif view_type == 'category' and category_id:
-            c.execute(f"""
-                SELECT
-                    {group_time} AS time_period,
-                    c.name AS category_name,
-                    COUNT(t.id) AS ticket_count,
-                    AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-                FROM tickets t
-                JOIN services s ON t.service_id = s.id
-                JOIN categories c ON s.category_id = c.id
-                WHERE t.created_at BETWEEN ? AND ? AND s.category_id = ?
-                GROUP BY time_period, c.id
-            """, (start_date, end_date, category_id))
-            chart_data = c.fetchall()
-        elif view_type == 'operator_overall':
-            c.execute(f"""
-                SELECT
-                    {group_time} AS time_period,
-                    o.name AS operator_name,
-                    o.operator_number,
-                    COUNT(t.id) AS ticket_count,
-                    AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-                FROM tickets t
-                LEFT JOIN operators o ON t.operator_id = o.id
-                WHERE t.created_at BETWEEN ? AND ?
-                GROUP BY time_period, o.id
-            """, (start_date, end_date))
-            chart_data = c.fetchall()
-        elif view_type == 'operator_individual' and operator_id and service_id:
-            c.execute(f"""
-                SELECT
-                    {group_time} AS time_period,
-                    s.name AS service_name,
-                    COUNT(t.id) AS ticket_count,
-                    AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-                FROM tickets t
-                JOIN services s ON t.service_id = s.id
-                WHERE t.created_at BETWEEN ? AND ? AND t.operator_id = ? AND t.service_id = ?
-                GROUP BY time_period, s.id
-            """, (start_date, end_date, operator_id, service_id))
-            chart_data = c.fetchall()
-
-        return jsonify({
-            "table_data": df.to_dict(orient='records'),
-            "chart_data": [{
-                "time_period": row[0],
-                "name": row[1],
-                "ticket_count": row[3] if len(row) > 3 else row[2],
-                "avg_service_time": row[4] if len(row) > 4 else row[3]
-            } for row in chart_data]
-        })
-
-@app.route('/api/admin/statistics/export', methods=['POST'])
-@admin_required
-def export_statistics():
-    """Export statistics to an Excel file."""
-    data = request.get_json() or {}
-    view_type = data.get('view_type')
-    service_id = data.get('service_id', type=int)
-    category_id = data.get('category_id', type=int)
-    operator_id = data.get('operator_id', type=int)
-    time_filter = data.get('time_filter')
-    start_date = data.get('start_date')
-    end_date = data.get('end_date')
-
-    if time_filter == 'custom' and (not start_date or not end_date):
-        return jsonify({"status": "error", "message": "Custom date range requires start_date and end_date"}), 400
-
-    if time_filter != 'custom':
-        end_date = datetime.now()
-        if time_filter == 'daily':
-            start_date = end_date - timedelta(days=1)
-        elif time_filter == 'monthly':
-            start_date = end_date - timedelta(days=30)
-        elif time_filter == 'half_yearly':
-            start_date = end_date - timedelta(days=180)
-        elif time_filter == 'yearly':
-            start_date = end_date - timedelta(days=365)
-        start_date = start_date.isoformat()
-        end_date = end_date.isoformat()
-
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        query = """
-            SELECT
-                t.number,
-                s.name AS service_name,
-                c.name AS category_name,
-                o.name AS operator_name,
-                o.operator_number,
-                t.status,
-                t.created_at,
-                t.finished_at,
-                (strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0 AS service_time
-            FROM tickets t
-            JOIN services s ON t.service_id = s.id
-            JOIN categories c ON s.category_id = c.id
-            LEFT JOIN operators o ON t.operator_id = o.id
-            WHERE t.created_at BETWEEN ? AND ?
-        """
-        params = [start_date, end_date]
-        if service_id:
-            query += " AND t.service_id = ?"
-            params.append(service_id)
-        if category_id:
-            query += " AND s.category_id = ?"
-            params.append(category_id)
-        if operator_id and view_type == 'operator_individual':
-            query += " AND t.operator_id = ?"
-            params.append(operator_id)
-
-        c.execute(query, params)
-        df = pd.DataFrame(c.fetchall(), columns=[
-            'Ticket Number', 'Service Name', 'Category Name', 'Operator Name',
-            'Operator Number', 'Status', 'Created At', 'Finished At', 'Service Time'
-        ])
-
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Summary', index=False)
-            group_time = {
-                'daily': "strftime('%Y-%m-%d', t.created_at)",
-                'monthly': "strftime('%Y-%m', t.created_at)",
-                'half_yearly': "strftime('%Y-' || (CASE WHEN strftime('%m', t.created_at) <= '06' THEN 'H1' ELSE 'H2' END), t.created_at)",
-                'yearly': "strftime('%Y', t.created_at)"
-            }.get(time_filter, "strftime('%Y-%m', t.created_at)")
-
-            if view_type == 'service':
-                c.execute(f"""
-                    SELECT
-                        {group_time} AS time_period,
-                        s.name AS service_name,
-                        c.name AS category_name,
-                        COUNT(t.id) AS ticket_count,
-                        AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-                    FROM tickets t
-                    JOIN services s ON t.service_id = s.id
-                    JOIN categories c ON s.category_id = c.id
-                    WHERE t.created_at BETWEEN ? AND ?
-                    GROUP BY time_period, s.id
-                """, (start_date, end_date))
-                service_df = pd.DataFrame(c.fetchall(), columns=[
-                    'Time Period', 'Service Name', 'Category Name', 'Ticket Count', 'Avg Service Time'
-                ])
-                service_df.to_excel(writer, sheet_name='Service Stats', index=False)
-            elif view_type == 'category':
-                c.execute(f"""
-                    SELECT
-                        {group_time} AS time_period,
-                        c.name AS category_name,
-                        COUNT(t.id) AS ticket_count,
-                        AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-                    FROM tickets t
-                    JOIN services s ON t.service_id = s.id
-                    JOIN categories c ON s.category_id = c.id
-                    WHERE t.created_at BETWEEN ? AND ?
-                    GROUP BY time_period, c.id
-                """, (start_date, end_date))
-                category_df = pd.DataFrame(c.fetchall(), columns=[
-                    'Time Period', 'Category Name', 'Ticket Count', 'Avg Service Time'
-                ])
-                category_df.to_excel(writer, sheet_name='Category Stats', index=False)
-            elif view_type == 'operator_overall':
-                c.execute(f"""
-                    SELECT
-                        {group_time} AS time_period,
-                        o.name AS operator_name,
-                        o.operator_number,
-                        COUNT(t.id) AS ticket_count,
-                        AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-                    FROM tickets t
-                    LEFT JOIN operators o ON t.operator_id = o.id
-                    WHERE t.created_at BETWEEN ? AND ?
-                    GROUP BY time_period, o.id
-                """, (start_date, end_date))
-                operator_df = pd.DataFrame(c.fetchall(), columns=[
-                    'Time Period', 'Operator Name', 'Operator Number', 'Ticket Count', 'Avg Service Time'
-                ])
-                operator_df.to_excel(writer, sheet_name='Operator Stats', index=False)
-
-        output.seek(0)
-        return send_file(
-            output,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=f'statistics_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-        )
-
-@app.route('/api/admin/recommendations', methods=['GET'])
-@admin_required
-def recommendations():
-    """Generate recommendations based on performance analytics."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        # Problematic services
-        c.execute("""
-            SELECT
-                s.name,
-                c.name AS category_name,
-                AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time,
-                COUNT(d.id) AS dispute_count,
-                COUNT(t.id) AS ticket_count
-            FROM tickets t
-            JOIN services s ON t.service_id = s.id
-            JOIN categories c ON s.category_id = c.id
-            LEFT JOIN disputes d ON t.number = d.ticket_number
-            WHERE t.finished_at IS NOT NULL
-            GROUP BY s.id
-            HAVING avg_service_time > 10 OR dispute_count > 0
-        """)
-        problem_services = [{
-            "service_name": row[0],
-            "category_name": row[1],
-            "avg_service_time": row[2],
-            "dispute_count": row[3],
-            "ticket_count": row[4]
-        } for row in c.fetchall()]
-
-        # Problematic categories
-        c.execute("""
-            SELECT
-                c.name,
-                AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time,
-                COUNT(t.id) AS ticket_count
-            FROM tickets t
-            JOIN services s ON t.service_id = s.id
-            JOIN categories c ON s.category_id = c.id
-            WHERE t.finished_at IS NOT NULL
-            GROUP BY c.id
-            HAVING avg_service_time > 15
-        """)
-        problem_categories = [{
-            "category_name": row[0],
-            "avg_service_time": row[1],
-            "ticket_count": row[2]
-        } for row in c.fetchall()]
-
-        # Problematic operators
-        c.execute("""
-            SELECT
-                o.name,
-                o.operator_number,
-                AVG(e.rating) AS avg_rating,
-                COUNT(d.id) AS dispute_count,
-                COUNT(t.id) AS ticket_count,
-                AVG((strftime('%s', t.finished_at) - strftime('%s', t.created_at)) / 60.0) AS avg_service_time
-            FROM operators o
-            LEFT JOIN evaluations e ON e.operator_id = o.id
-            LEFT JOIN disputes d ON d.operator_id = o.id
-            LEFT JOIN tickets t ON t.operator_id = o.id AND t.finished_at IS NOT NULL
-            GROUP BY o.id
-            HAVING avg_rating < 3 OR dispute_count > 0 OR avg_service_time > 15
-        """)
-        problem_operators = [{
-            "name": row[0],
-            "operator_number": row[1],
-            "avg_rating": row[2],
-            "dispute_count": row[3],
-            "ticket_count": row[4],
-            "avg_service_time": row[5]
-        } for row in c.fetchall()]
-
-        recommendations = []
-        recommendations.extend([
-            {
-                "type": "service",
-                "message": f"Service '{s['service_name']}' in category '{s['category_name']}' has high service time "
-                           f"({s['avg_service_time']:.1f} min) or disputes ({s['dispute_count']}). "
-                           "Consider adding operators or optimizing the process."
-            } for s in problem_services
-        ])
-        recommendations.extend([
-            {
-                "type": "category",
-                "message": f"Category '{c['category_name']}' has high average service time "
-                           f"({c['avg_service_time']:.1f} min). Review service distribution."
-            } for c in problem_categories
-        ])
-        recommendations.extend([
-            {
-                "type": "operator",
-                "message": f"Operator '{o['name']}' (#{o['operator_number'] or 'N/A'}) has low rating "
-                           f"({o['avg_rating']:.1f}), high service time ({o['avg_service_time']:.1f} min), "
-                           f"or disputes ({o['dispute_count']}). Consider training or reassignment."
-            } for o in problem_operators if o['avg_rating'] or o['dispute_count'] or o['avg_service_time']
-        ])
-
-        return jsonify({
-            "problem_services": problem_services,
-            "problem_categories": problem_categories,
-            "problem_operators": problem_operators,
-            "recommendations": recommendations
-        })
-
-@app.route('/admin_login', methods=['GET', 'POST'])
+@app.route('/admin_login')
+@limiter.limit("10 per minute")
 def admin_login():
-    """Handle admin login."""
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        if not username or not password:
-            return render_template('admin_login.html', error="Username and password are required",
-                                   server_url=SERVER_URL), 400
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("SELECT id, hashed_password FROM admin_users WHERE username = ?", (username,))
-            admin = c.fetchone()
-            if admin and check_password_hash(admin[1], password):
-                session['admin_id'] = admin[0]
-                logging.info(f"Admin {username} logged in")
-                return redirect(url_for('admin'))
-            logging.warning(f"Failed admin login attempt for {username}")
-            return render_template('admin_login.html', error="Invalid credentials",
-                                   server_url=SERVER_URL), 401
-    return render_template('admin_login.html', server_url=SERVER_URL)
+    return render_template('admin_login.html', SERVER_URL=SERVER_URL)
 
-@app.route('/admin_logout')
-def admin_logout():
-    """Handle admin logout."""
-    session.pop('admin_id', None)
-    logging.info("Admin logged out")
-    return redirect(url_for('admin_login'))
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    """Handle operator login."""
-    if request.method == 'POST':
-        operator_id = request.form.get('operator_id', type=int)
-        password = request.form.get('password')
-        if not operator_id or not password:
-            return render_template('login.html', error="Operator ID and password are required",
-                                   server_url=SERVER_URL), 400
-        with sqlite3.connect(DB_PATH) as conn:
-            c = conn.cursor()
-            c.execute("SELECT id, hashed_password FROM operators WHERE id = ?", (operator_id,))
-            operator = c.fetchone()
-            if operator and check_password_hash(operator[1], password):
-                session['operator_id'] = operator[0]
-                logging.info(f"Operator {operator_id} logged in")
-                return redirect(url_for('operator'))
-            logging.warning(f"Failed login attempt for operator {operator_id}")
-            return render_template('login.html', error="Invalid credentials",
-                                   server_url=SERVER_URL), 401
-    return render_template('login.html', server_url=SERVER_URL)
-
-@app.route('/logout')
-@login_required
-def logout():
-    """Handle operator logout."""
-    operator_id = session.pop('operator_id', None)
-    logging.info(f"Operator {operator_id} logged out")
-    return redirect(url_for('login'))
-
-@app.route('/operator')
-@login_required
-def operator():
-    """Render the operator dashboard."""
-    operator_id = session['operator_id']
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, name, operator_number FROM operators WHERE status = 'active' ORDER BY name")
-        operators = c.fetchall()
-        c.execute("SELECT number, status, created_at FROM tickets WHERE operator_id = ? "
-                  "AND status IN ('waiting', 'called') ORDER BY created_at",
-                  (operator_id,))
-        tickets = c.fetchall()
-        c.execute("""
-            SELECT c.ticket_number, c.sender_type, c.content, c.timestamp
-            FROM chats c
-            WHERE c.ticket_number IN (SELECT number FROM tickets WHERE operator_id = ?)
-            ORDER BY c.timestamp DESC LIMIT 50
-        """, (operator_id,))
-        messages = c.fetchall()
-        return render_template('operator.html', operator_id=operator_id, operators=operators,
-                               tickets=tickets, messages=messages, server_url=SERVER_URL)
-
-@app.route('/tablet/<int:operator_id>/data')
-@login_required
-def tablet_data(operator_id):
-    """Fetch ticket data for the operator's tablet view."""
-    if session['operator_id'] != operator_id:
+@app.route('/operator/<int:operator_id>')
+@operator_required
+def operator_panel(operator_id):
+    if session.get('operator_id') != operator_id:
         abort(403)
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT number, status, created_at FROM tickets WHERE operator_id = ? "
-                  "AND status IN ('waiting', 'called') ORDER BY created_at",
-                  (operator_id,))
-        tickets = [{"number": row[0], "status": row[1], "created_at": row[2]} for row in c.fetchall()]
-        return jsonify(tickets)
-
-@app.route('/call_ticket', methods=['POST'])
-@login_required
-def call_ticket():
-    """Call the next waiting ticket for the operator."""
-    operator_id = session['operator_id']
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT number FROM tickets WHERE operator_id = ? AND status = 'called'",
-                  (operator_id,))
-        if c.fetchone():
-            return jsonify({"error": "You already have a called ticket"}), 400
-        c.execute("""
-            SELECT t.id, t.number
-            FROM tickets t
-            WHERE t.status = 'waiting' AND t.service_id IN (
-                SELECT service_id FROM operator_services WHERE operator_id = ?
-            )
-            ORDER BY t.created_at LIMIT 1
-        """, (operator_id,))
-        ticket = c.fetchone()
-        if ticket:
-            ticket_id, ticket_number = ticket
-            c.execute("UPDATE tickets SET status = 'called', operator_id = ? WHERE id = ?",
-                      (operator_id, ticket_id))
-            conn.commit()
-            socketio.emit('update_queue', {'ticket': ticket_number, 'operator_id': operator_id})
-            logging.info(f"Operator {operator_id} called ticket {ticket_number}")
-            return jsonify({"ticket": ticket_number})
-        return jsonify({"ticket": None})
-
-@app.route('/finish_ticket', methods=['POST'])
-@login_required
-def finish_ticket():
-    """Mark a ticket as finished."""
-    data = request.get_json() or {}
-    ticket_number = data.get('ticket')
-    operator_id = session['operator_id']
-    if not ticket_number:
-        return jsonify({"error": "Ticket number is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("UPDATE tickets SET status = 'finished', finished_at = ? "
-                  "WHERE number = ? AND operator_id = ?",
-                  (datetime.now().isoformat(), ticket_number, operator_id))
-        if c.rowcount == 0:
-            return jsonify({"error": "Ticket not found or not assigned to you"}), 404
-        conn.commit()
-        socketio.emit('remove_ticket', {'ticket': ticket_number})
-        logging.info(f"Operator {operator_id} finished ticket {ticket_number}")
-        return jsonify({"status": "ok"})
-
-@app.route('/redirect_ticket', methods=['POST'])
-@login_required
-def redirect_ticket():
-    """Redirect a ticket to another operator."""
-    data = request.get_json() or {}
-    ticket_number = data.get('ticket')
-    new_operator_id = data.get('new_operator_id', type=int)
-    operator_id = session['operator_id']
-    if not ticket_number or not new_operator_id:
-        return jsonify({"error": "Ticket number and new operator ID are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("UPDATE tickets SET operator_id = ?, status = 'waiting' "
-                  "WHERE number = ? AND operator_id = ?",
-                  (new_operator_id, ticket_number, operator_id))
-        if c.rowcount == 0:
-            return jsonify({"error": "Ticket not found or not assigned to you"}), 404
-        conn.commit()
-        socketio.emit('remove_ticket', {'ticket': ticket_number})
-        socketio.emit('update_queue', {'ticket': ticket_number, 'operator_id': new_operator_id})
-        logging.info(f"Operator {operator_id} redirected ticket {ticket_number} to {new_operator_id}")
-        return jsonify({"status": "ok"})
-
-@app.route('/send_message', methods=['POST'])
-@login_required
-def send_message():
-    """Send a chat message for a ticket."""
-    data = request.get_json() or {}
-    operator_id = session['operator_id']
-    ticket_number = data.get('ticket_number')
-    content = data.get('content')
-    if not ticket_number or not content:
-        return jsonify({"error": "Ticket number and message content are required"}), 400
-    timestamp = datetime.now().isoformat()
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("INSERT INTO chats (ticket_number, sender_type, sender_id, content, timestamp) "
-                  "VALUES (?, 'operator', ?, ?, ?)",
-                  (ticket_number, operator_id, content, timestamp))
-        conn.commit()
-        socketio.emit('message', {
-            'room': ticket_number,
-            'sender': f"Operator {operator_id}",
-            'content': content,
-            'timestamp': timestamp
-        })
-        logging.info(f"Operator {operator_id} sent message to ticket {ticket_number}: {content}")
-        return jsonify({"status": "ok"})
-
-@app.route('/api/admin/upload_media', methods=['POST'])
-@admin_required
-def upload_media():
-    """Upload media files for the display."""
-    if 'file' not in request.files:
-        logging.error("No file uploaded")
-        return jsonify({"status": "error", "message": "No file provided"}), 400
-    file = request.files['file']
-    if file.filename == '':
-        logging.error("Empty filename")
-        return jsonify({"status": "error", "message": "No file selected"}), 400
-    if not allowed_file(file.filename):
-        logging.error(f"Invalid file type: {file.filename}")
-        return jsonify({"status": "error", "message": "Invalid file type"}), 400
-    original_filename = file.filename
-    filename = secure_filename(f"{uuid.uuid4()}_{original_filename}")
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(file_path)
-    file_size = os.path.getsize(file_path)
-    if file_size > 100 * 1024 * 1024:  # 100MB limit
-        os.remove(file_path)
-        logging.error(f"File {filename} exceeds 100MB limit")
-        return jsonify({"status": "error", "message": "File size exceeds 100MB"}), 400
-    media_type = 'image' if filename.rsplit('.', 1)[1].lower() in {'jpg', 'jpeg', 'png'} else 'video'
-    title = request.form.get('title', '')
-    description = request.form.get('description', '')
-    display_order = request.form.get('display_order', 0, type=int)
-    is_active = 1 if request.form.get('is_active') == 'on' else 0
-    duration = request.form.get('duration', 10, type=int) if media_type == 'image' else None
-    created_at = datetime.now().isoformat()
-    admin_id = session['admin_id']
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO media (type, filename, original_filename, title, description, display_order,
-                              is_active, duration, created_at, uploaded_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (media_type, filename, original_filename, title, description, display_order,
-              is_active, duration, created_at, admin_id))
-        conn.commit()
-        logging.info(f"Uploaded media: {filename}, type: {media_type}, size: {file_size} bytes")
-        socketio.emit('media_playlist_updated')
-        return jsonify({"status": "ok", "filename": filename})
-
-@app.route('/admin/media', methods=['GET'])
-@admin_required
-def get_media():
-    """Fetch all media items."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("""
-            SELECT id, type, filename, original_filename, title, description,
-                   display_order, is_active, duration
-            FROM media
-            ORDER BY display_order, created_at
-        """)
-        media = [{
-            "id": row[0],
-            "type": row[1],
-            "filename": row[2],
-            "original_filename": row[3],
-            "title": row[4],
-            "description": row[5],
-            "display_order": row[6],
-            "is_active": row[7],
-            "duration": row[8]
-        } for row in c.fetchall()]
-        logging.info(f"Fetched {len(media)} media items")
-        return jsonify(media)
-
-@app.route('/admin/delete_media', methods=['POST'])
-@admin_required
-def delete_media():
-    """Delete a media item."""
-    data = request.get_json() or {}
-    media_id = data.get('id', type=int)
-    if not media_id:
-        return jsonify({"status": "error", "message": "Media ID is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT filename FROM media WHERE id = ?", (media_id,))
-        media = c.fetchone()
-        if not media:
-            logging.error(f"Media ID {media_id} not found")
-            return jsonify({"status": "error", "message": "Media not found"}), 404
-        filename = media[0]
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            logging.info(f"Removed file: {file_path}")
-        c.execute("DELETE FROM media WHERE id = ?", (media_id,))
-        conn.commit()
-        logging.info(f"Deleted media: ID {media_id}, filename: {filename}")
-        socketio.emit('media_playlist_updated')
-        return jsonify({"status": "ok"})
-
-@app.route('/api/admin/media/update', methods=['POST'])
-@admin_required
-def update_media():
-    """Update a media item's details."""
-    data = request.get_json() or {}
-    media_id = data.get('id', type=int)
-    title = data.get('title')
-    description = data.get('description')
-    display_order = data.get('display_order', type=int)
-    is_active = data.get('is_active', type=int)
-    duration = data.get('duration', type=int)
-    if not media_id:
-        return jsonify({"status": "error", "message": "Media ID is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT filename FROM media WHERE id = ?", (media_id,))
-        if not c.fetchone():
-            logging.error(f"Media ID {media_id} not found")
-            return jsonify({"status": "error", "message": "Media not found"}), 404
-        update_fields = []
-        update_params = []
-        if title is not None:
-            update_fields.append("title = ?")
-            update_params.append(title)
-        if description is not None:
-            update_fields.append("description = ?")
-            update_params.append(description)
-        if display_order is not None:
-            update_fields.append("display_order = ?")
-            update_params.append(display_order)
-        if is_active is not None:
-            update_fields.append("is_active = ?")
-            update_params.append(is_active)
-        if duration is not None:
-            update_fields.append("duration = ?")
-            update_params.append(duration)
-        if update_fields:
-            update_params.append(media_id)
-            c.execute(f"UPDATE media SET {', '.join(update_fields)} WHERE id = ?", update_params)
-            conn.commit()
-            logging.info(f"Updated media ID {media_id}")
-            socketio.emit('media_playlist_updated')
-        return jsonify({"status": "ok"})
-
-@app.route('/api/admin/media/toggle_active', methods=['POST'])
-@admin_required
-def toggle_media_active():
-    """Toggle the active status of a media item."""
-    data = request.get_json() or {}
-    media_id = data.get('id', type=int)
-    if not media_id:
-        return jsonify({"status": "error", "message": "Media ID is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT is_active FROM media WHERE id = ?", (media_id,))
-        media = c.fetchone()
-        if not media:
-            logging.error(f"Media ID {media_id} not found")
-            return jsonify({"status": "error", "message": "Media not found"}), 404
-        new_status = 0 if media[0] == 1 else 1
-        c.execute("UPDATE media SET is_active = ? WHERE id = ?", (new_status, media_id))
-        conn.commit()
-        logging.info(f"Toggled media ID {media_id} to active={new_status}")
-        socketio.emit('media_playlist_updated')
-        return jsonify({"status": "ok", "is_active": new_status})
-
-@app.route('/api/admin/media/reorder', methods=['POST'])
-@admin_required
-def reorder_media():
-    """Reorder media items based on provided IDs."""
-    data = request.get_json() or {}
-    media_ids = data.get('ids', [])
-    if not media_ids or not isinstance(media_ids, list):
-        return jsonify({"status": "error", "message": "Invalid or missing IDs"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        for index, media_id in enumerate(media_ids):
-            c.execute("UPDATE media SET display_order = ? WHERE id = ?", (index, media_id))
-        conn.commit()
-        logging.info(f"Reordered media: {media_ids}")
-        socketio.emit('media_playlist_updated')
-        return jsonify({"status": "ok"})
-
-@app.route('/api/display/playlist', methods=['GET'])
-def get_playlist():
-    """Fetch the active media playlist for the display."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT filename, type, duration FROM media WHERE is_active = 1 "
-                  "ORDER BY display_order, created_at")
-        playlist = [{"filename": row[0], "type": row[1], "duration": row[2]} for row in c.fetchall()]
-        logging.info(f"Fetched playlist with {len(playlist)} items")
-        return jsonify(playlist)
-
-@socketio.on('join')
-def handle_join(data):
-    """Handle a client joining a socket room."""
-    room = data.get('room')
-    if room:
-        join_room(room)
-        logging.info(f"User joined room {room}")
-
-@socketio.on('message')
-def handle_message(data):
-    """Handle chat messages via SocketIO."""
-    room = data.get('room')
-    content = data.get('content')
-    sender_id = data.get('sender_id')
-    ticket_number = data.get('ticket_number')
-    sender_type = data.get('sender_type', 'operator')
-    sender = data.get('sender', f"Operator {sender_id}")
-    if not room or not content or not ticket_number:
-        logging.error("Invalid message data")
-        return
-    timestamp = datetime.now().isoformat()
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("INSERT INTO chats (ticket_number, sender_type, sender_id, content, timestamp) "
-                  "VALUES (?, ?, ?, ?, ?)",
-                  (ticket_number, sender_type, sender_id, content, timestamp))
-        conn.commit()
-        emit('message', {
-            'sender': sender,
-            'content': content,
-            'timestamp': timestamp
-        }, room=room)
-        logging.info(f"Message in room {room} from {sender}: {content}")
+    return render_template('operator.html', operator_id=operator_id, SERVER_URL=SERVER_URL)
 
 @app.route('/admin')
 @admin_required
-def admin():
-    """Render the admin dashboard."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, name, parent_id, color FROM categories ORDER BY name")
-        categories = c.fetchall()
-        c.execute("SELECT s.id, s.name, c.name, s.color FROM services s "
-                  "JOIN categories c ON s.category_id = c.id ORDER BY s.name")
-        services = c.fetchall()
-        c.execute("SELECT id, name, status, operator_number FROM operators ORDER BY name")
-        operators = c.fetchall()
-        c.execute("SELECT operator_id, service_id FROM operator_services")
-        operator_services = c.fetchall()
-        c.execute("SELECT number, service_id FROM tickets WHERE status = 'waiting' ORDER BY created_at")
-        waiting = c.fetchall()
-        c.execute("SELECT number, service_id, operator_id, created_at, finished_at "
-                  "FROM tickets WHERE status = 'finished' ORDER BY finished_at DESC LIMIT 100")
-        stats = c.fetchall()
-        c.execute("SELECT AVG(strftime('%s', finished_at) - strftime('%s', created_at)) / 60.0 "
-                  "FROM tickets WHERE finished_at IS NOT NULL")
-        avg_time = round(c.fetchone()[0] or 0, 1)
-        c.execute("SELECT id, type, filename, original_filename, title, description, "
-                  "display_order, is_active, duration FROM media ORDER BY display_order, created_at")
-        media = c.fetchall()
-        return render_template('admin.html', categories=categories, services=services,
-                               operators=operators, operator_services=operator_services,
-                               waiting=waiting, stats=stats, avg_time=avg_time,
-                               media=media, server_url=SERVER_URL)
+def admin_panel():
+    return render_template('admin.html', SERVER_URL=SERVER_URL)
+
+@app.route('/display')
+def display_board():
+    return render_template('display.html', SERVER_URL=SERVER_URL)
+
+@app.route('/tablet/<int:operator_id>')
+def operator_tablet(operator_id):
+    return render_template('tablet.html', operator_id=operator_id, SERVER_URL=SERVER_URL)
+
+@app.route('/status/<string:ticket_number>')
+def ticket_status(ticket_number):
+    db_session = SessionLocal()
+    try:
+        ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number).first()
+        if not ticket:
+            abort(404, description="Ticket not found.")
+        return render_template('status.html', ticket_number=ticket_number, SERVER_URL=SERVER_URL)
+    finally:
+        db_session.close()
+
+@app.route('/chat/<string:ticket_number>')
+def chat_interface(ticket_number):
+    db_session = SessionLocal()
+    try:
+        ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number).first()
+        if not ticket:
+            abort(404, description="Ticket not found.")
+        return render_template('chat.html', ticket_number=ticket_number, SERVER_URL=SERVER_URL)
+    finally:
+        db_session.close()
+
+@app.route('/admin/categories')
+@admin_required
+def admin_categories():
+    return render_template('admin_categories.html', SERVER_URL=SERVER_URL)
+
+@app.route('/admin/services')
+@admin_required
+def admin_services():
+    return render_template('admin_services.html', SERVER_URL=SERVER_URL)
+
+@app.route('/admin/operators')
+@admin_required
+def admin_operators():
+    return render_template('admin_operators.html', SERVER_URL=SERVER_URL)
+
+@app.route('/admin/media')
+@admin_required
+def admin_media():
+    return render_template('admin_media.html', SERVER_URL=SERVER_URL)
+
+@app.route('/admin/translations')
+@admin_required
+def admin_translations():
+    return render_template('admin_translations.html', SERVER_URL=SERVER_URL)
+
+@app.route('/admin/languages')
+@admin_required
+def admin_languages():
+    return render_template('admin_languages.html', SERVER_URL=SERVER_URL)
+
+@app.route('/admin/webhooks')
+@admin_required
+def admin_webhooks():
+    return render_template('admin_webhooks.html', SERVER_URL=SERVER_URL)
 
 @app.route('/admin/statistics')
 @admin_required
 def admin_statistics():
-    """Render the admin statistics page."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT id, name FROM categories ORDER BY name")
-        categories = c.fetchall()
-        c.execute("SELECT id, name FROM services ORDER BY name")
-        services = c.fetchall()
-        c.execute("SELECT id, name FROM operators ORDER BY name")
-        operators = c.fetchall()
-        return render_template('admin_statistics.html', categories=categories,
-                               services=services, operators=operators, server_url=SERVER_URL)
+    return render_template('admin_statistics.html', SERVER_URL=SERVER_URL)
 
-@app.route('/add_category', methods=['POST'])
-@admin_required
-def add_category():
-    """Add a new category."""
-    name = request.form.get('name')
-    parent_id = request.form.get('parent_id', type=int)
-    color = request.form.get('color', '#FFFFFF')
-    if not name:
-        return jsonify({"status": "error", "message": "Category name is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        if parent_id:
-            depth = get_category_depth(parent_id)
-            if depth >= 10:
-                logging.warning(f"Cannot add category '{name}' under {parent_id}: max depth reached")
-                return jsonify({"status": "error", "message": "Maximum category depth reached"}), 400
-        c.execute("INSERT INTO categories (name, parent_id, color) VALUES (?, ?, ?)",
-                  (name, parent_id, color))
-        conn.commit()
-        logging.info(f"Added category: {name}, parent_id: {parent_id or 'None'}, color: {color}")
-        return redirect(url_for('admin'))
+@app.route('/forgot_password')
+def forgot_password():
+    role = request.args.get('role', 'operator')
+    return render_template('forgot_password.html', SERVER_URL=SERVER_URL, role=role)
 
-@app.route('/edit_category', methods=['POST'])
-@admin_required
-def edit_category():
-    """Edit an existing category."""
-    data = request.get_json() or {}
-    category_id = data.get('id', type=int)
-    name = data.get('name')
-    color = data.get('color', '#FFFFFF')
-    if not category_id or not name:
-        return jsonify({"status": "error", "message": "Category ID and name are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("UPDATE categories SET name = ?, color = ? WHERE id = ?",
-                  (name, color, category_id))
-        if c.rowcount == 0:
-            return jsonify({"status": "error", "message": "Category not found"}), 404
-        conn.commit()
-        logging.info(f"Edited category {category_id}: {name}, color: {color}")
-        return jsonify({"status": "ok"})
+# --- API Endpoints ---
 
-@app.route('/delete_category', methods=['POST'])
-@admin_required
-def delete_category():
-    """Delete a category if it has no subcategories or services."""
-    data = request.get_json() or {}
-    category_id = data.get('id', type=int)
-    if not category_id:
-        return jsonify({"status": "error", "message": "Category ID is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM categories WHERE parent_id = ?", (category_id,))
-        subcategories_count = c.fetchone()[0]
-        c.execute("SELECT COUNT(*) FROM services WHERE category_id = ?", (category_id,))
-        services_count = c.fetchone()[0]
-        if subcategories_count > 0 or services_count > 0:
-            logging.warning(f"Cannot delete category {category_id}: has subcategories or services")
-            return jsonify({"status": "error", "message": "Cannot delete category with subcategories or services"}), 400
-        c.execute("DELETE FROM categories WHERE id = ?", (category_id,))
-        if c.rowcount == 0:
-            return jsonify({"status": "error", "message": "Category not found"}), 404
-        conn.commit()
-        logging.info(f"Deleted category {category_id}")
-        return jsonify({"status": "ok"})
+ns = api.namespace('api', description='Queue Management Operations')
 
-@app.route('/add_service', methods=['POST'])
-@admin_required
-def add_service():
-    """Add a new service."""
-    name = request.form.get('name')
-    category_id = request.form.get('category_id', type=int)
-    color = request.form.get('color', '#FFFFFF')
-    if not name or not category_id:
-        return jsonify({"status": "error", "message": "Service name and category ID are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("INSERT INTO services (name, category_id, color) VALUES (?, ?, ?)",
-                  (name, category_id, color))
-        conn.commit()
-        logging.info(f"Added service: {name}, category_id: {category_id}, color: {color}")
-        return redirect(url_for('admin'))
+# Models for Swagger
+ticket_model = api.model('Ticket', {
+    'service_id': fields.Integer(required=True, description='Service ID'),
+    'client_telegram_chat_id': fields.String(description='Client Telegram Chat ID')
+})
+category_model = api.model('Category', {
+    'name': fields.String(required=True, description='Category name')
+})
+subcategory_model = api.model('Subcategory', {
+    'name': fields.String(required=True, description='Subcategory name'),
+    'category_id': fields.Integer(required=True, description='Category ID')
+})
+service_model = api.model('Service', {
+    'name': fields.String(required=True, description='Service name'),
+    'category_id': fields.Integer(required=True, description='Category ID'),
+    'subcategory_id': fields.Integer(description='Subcategory ID'),
+    'estimated_time': fields.Integer(description='Estimated time in minutes')
+})
+operator_model = api.model('Operator', {
+    'name': fields.String(required=True, description='Operator name'),
+    'operator_number': fields.String(required=True, description='Operator number'),
+    'password': fields.String(required=True, description='Password'),
+    'telegram_chat_id': fields.String(description='Telegram Chat ID'),
+    'assigned_services': fields.List(fields.Integer, description='List of service IDs')
+})
+operator_login_model = api.model('OperatorLogin', {
+    'username': fields.String(required=True, description='Operator number'),
+    'password': fields.String(required=True, description='Password')
+})
+admin_login_model = api.model('AdminLogin', {
+    'username': fields.String(required=True, description='Admin username'),
+    'password': fields.String(required=True, description='Password')
+})
+webhook_model = api.model('Webhook', {
+    'event_type': fields.String(required=True, description='Event type'),
+    'url': fields.String(required=True, description='Webhook URL')
+})
+language_model = api.model('Language', {
+    'lang_code': fields.String(required=True, description='Language code'),
+    'display_name': fields.String(required=True, description='Display name')
+})
+media_model = api.model('Media', {
+    'file': fields.Raw(required=True, description='File to upload')
+})
+chat_message_model = api.model('ChatMessage', {
+    'ticket_number': fields.String(required=True, description='Ticket number'),
+    'sender_type': fields.String(required=True, description='Sender type (client/operator)'),
+    'sender_id': fields.String(description='Sender ID'),
+    'content': fields.String(description='Message content'),
+    'file_url': fields.String(description='File URL'),
+    'file_type': fields.String(description='File type')
+})
 
-@app.route('/edit_service', methods=['POST'])
-@admin_required
-def edit_service():
-    """Edit an existing service."""
-    data = request.get_json() or {}
-    service_id = data.get('id', type=int)
-    name = data.get('name')
-    color = data.get('color', '#FFFFFF')
-    if not service_id or not name:
-        return jsonify({"status": "error", "message": "Service ID and name are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("UPDATE services SET name = ?, color = ? WHERE id = ?",
-                  (name, color, service_id))
-        if c.rowcount == 0:
-            return jsonify({"status": "error", "message": "Service not found"}), 404
-        conn.commit()
-        logging.info(f"Edited service {service_id}: {name}, color: {color}")
-        return jsonify({"status": "ok"})
-
-@app.route('/delete_service', methods=['POST'])
-@admin_required
-def delete_service():
-    """Delete a service if not assigned to operators."""
-    data = request.get_json() or {}
-    service_id = data.get('id', type=int)
-    if not service_id:
-        return jsonify({"status": "error", "message": "Service ID is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM operator_services WHERE service_id = ?", (service_id,))
-        if c.fetchone()[0] > 0:
-            return jsonify({"status": "error", "message": "Cannot delete service assigned to operators"}), 400
-        c.execute("DELETE FROM services WHERE id = ?", (service_id,))
-        if c.rowcount == 0:
-            return jsonify({"status": "error", "message": "Service not found"}), 404
-        conn.commit()
-        logging.info(f"Deleted service {service_id}")
-        return jsonify({"status": "ok"})
-
-@app.route('/add_operator', methods=['POST'])
-@admin_required
-def add_operator():
-    """Add a new operator."""
-    name = request.form.get('name')
-    password = request.form.get('password')
-    operator_number = request.form.get('operator_number', type=int)
-    status = request.form.get('status', 'active')
-    if not name or not password:
-        return jsonify({"status": "error", "message": "Name and password are required"}), 400
-    hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
+@ns.route('/categories')
+class Categories(Resource):
+    @api.doc(description='Get all categories with pagination')
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
         try:
-            c.execute("INSERT INTO operators (name, hashed_password, status, operator_number) "
-                      "VALUES (?, ?, ?, ?)",
-                      (name, hashed_password, status, operator_number))
-            conn.commit()
-            logging.info(f"Added operator: {name}, number: {operator_number or 'None'}")
-            return redirect(url_for('admin'))
-        except sqlite3.IntegrityError:
-            logging.error(f"Failed to add operator {name}: duplicate operator number")
-            return jsonify({"status": "error", "message": "Operator number already exists"}), 400
+            categories = db_session.query(Category).order_by(Category.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Category).count()
+            return {
+                "categories": [{"id": c.id, "name": c.name} for c in categories],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
 
-@app.route('/edit_operator', methods=['POST'])
-@admin_required
-def edit_operator():
-    """Edit an existing operator."""
-    data = request.get_json() or {}
-    operator_id = data.get('id', type=int)
-    name = data.get('name')
-    password = data.get('password')
-    status = data.get('status')
-    operator_number = data.get('operator_number', type=int)
-    if not operator_id or not name or not status:
-        return jsonify({"status": "error", "message": "Operator ID, name, and status are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
+@ns.route('/categories/<int:category_id>/subcategories')
+class Subcategories(Resource):
+    @api.doc(description='Get subcategories for a category')
+    def get(self, category_id):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
         try:
-            if password:
-                hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-                c.execute("UPDATE operators SET name = ?, hashed_password = ?, status = ?, operator_number = ? "
-                          "WHERE id = ?",
-                          (name, hashed_password, status, operator_number, operator_id))
+            subcategories = db_session.query(Subcategory).filter(Subcategory.category_id == category_id).order_by(Subcategory.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Subcategory).filter(Subcategory.category_id == category_id).count()
+            return {
+                "subcategories": [{"id": s.id, "name": s.name, "category_id": s.category_id} for s in subcategories],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/subcategories/<int:subcategory_id>/services')
+class SubcategoryServices(Resource):
+    @api.doc(description='Get services for a subcategory')
+    def get(self, subcategory_id):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            services = db_session.query(Service).filter(Service.subcategory_id == subcategory_id).order_by(Service.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Service).filter(Service.subcategory_id == subcategory_id).count()
+            return {
+                "services": [{"id": s.id, "name": s.name, "category_id": s.category_id, "subcategory_id": s.subcategory_id, "estimated_time": s.estimated_time} for s in services],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/categories/<int:category_id>/services')
+class CategoryServices(Resource):
+    @api.doc(description='Get services for a category')
+    def get(self, category_id):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            services = db_session.query(Service).filter(Service.category_id == category_id).order_by(Service.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Service).filter(Service.category_id == category_id).count()
+            return {
+                "services": [{"id": s.id, "name": s.name, "category_id": s.category_id, "subcategory_id": s.subcategory_id, "estimated_time": s.estimated_time} for s in services],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/ticket')
+class TicketResource(Resource):
+    @api.expect(ticket_model)
+    @api.doc(description='Create a new ticket')
+    def post(self):
+        data = request.get_json()
+        service_id = data.get('service_id')
+        client_telegram_chat_id = data.get('client_telegram_chat_id')
+
+        if not service_id:
+            api.abort(400, "Service ID is required")
+
+        db_session = SessionLocal()
+        try:
+            service = db_session.query(Service).filter(Service.id == service_id).first()
+            if not service:
+                api.abort(404, "Service not found")
+
+            ticket_number = generate_ticket_number(service.category_id, service.subcategory_id, db_session)
+            valid_until = get_current_tashkent_time() + timedelta(minutes=service.estimated_time * 2 if service.estimated_time else 30)
+
+            ticket = Ticket(
+                number=ticket_number,
+                service_id=service_id,
+                client_telegram_chat_id=client_telegram_chat_id,
+                status='waiting',
+                created_at=get_current_tashkent_time()
+            )
+            db_session.add(ticket)
+            db_session.commit()
+
+            qr_data = f"{BASE_URL_FOR_QR}/status/{ticket_number}"
+            qr_img = qrcode.make(qr_data)
+            qr_filename = f"qr_{ticket_number}.png"
+            qr_filepath = os.path.join(app.root_path, 'static', 'qrcodes', qr_filename)
+            os.makedirs(os.path.dirname(qr_filepath), exist_ok=True)
+            qr_img.save(qr_filepath)
+            qr_code_url = f"{BASE_URL_FOR_QR}/static/qrcodes/{qr_filename}"
+
+            trigger_webhook('new_ticket', {
+                'ticket_number': ticket_number,
+                'service_id': service_id,
+                'client_telegram_chat_id': client_telegram_chat_id,
+                'created_at': get_current_tashkent_time().isoformat(),
+                'status': 'waiting'
+            })
+
+            if client_telegram_chat_id:
+                message = (
+                    f"Sizning navbat raqamingiz: <b>{ticket_number}</b>\n"
+                    f"Xizmat: <b>{service.name}</b>\n"
+                    f"Taxminiy kutish vaqti: <b>{service.estimated_time or 30} min</b>\n"
+                    f"Navbat holatini tekshirish: {BASE_URL_FOR_QR}/status/{ticket_number}\n"
+                    f"Amal qilish muddati: {valid_until.strftime('%Y-%m-%d %H:%M')}"
+                )
+                send_telegram_message_async.delay(client_telegram_chat_id, message)
+
+            return {
+                "message": "Ticket created successfully",
+                "ticket_number": ticket_number,
+                "qr_code_url": qr_code_url,
+                "valid_until": valid_until.isoformat()
+            }, 201
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error creating ticket: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/queue')
+class Queue(Resource):
+    @api.doc(description='Get current queue')
+    def get(self):
+        db_session = SessionLocal()
+        try:
+            tickets = db_session.query(Ticket.number, Ticket.status, Operator.name.label('operator_name')).\
+                outerjoin(Operator, Ticket.operator_id == Operator.id).\
+                filter(Ticket.status.in_(['waiting', 'called'])).\
+                order_by(
+                    func.case(
+                        (Ticket.status == 'called', 1),
+                        (Ticket.status == 'waiting', 2),
+                        else_=3
+                    ),
+                    Ticket.priority.desc(),
+                    Ticket.created_at.asc()
+                ).all()
+            return [{"number": t.number, "status": t.status, "operator_name": t.operator_name} for t in tickets]
+        finally:
+            db_session.close()
+
+@ns.route('/tablet/<int:operator_id>/current_ticket')
+class TabletCurrentTicket(Resource):
+    @api.doc(description='Get current ticket for operator tablet')
+    def get(self, operator_id):
+        db_session = SessionLocal()
+        try:
+            ticket = db_session.query(Ticket).filter(Ticket.operator_id == operator_id, Ticket.status == 'called').first()
+            return {"ticket_number": ticket.number if ticket else None}
+        finally:
+            db_session.close()
+
+@ns.route('/operator_login')
+class OperatorLogin(Resource):
+    @api.expect(operator_login_model)
+    @api.doc(description='Operator login')
+    @limiter.limit("10 per minute")
+    def post(self):
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        db_session = SessionLocal()
+        try:
+            operator = db_session.query(Operator).filter(Operator.operator_number == username).first()
+            if operator and check_password_hash(operator.password_hash, password):
+                session['operator_id'] = operator.id
+                session['operator_name'] = operator.name
+                session['role'] = 'operator'
+                logging.info(f"Operator {username} logged in.")
+                return {
+                    "message": "Login successful",
+                    "operator_id": operator.id,
+                    "theme_preference": operator.theme_preference
+                }, 200
+            logging.warning(f"Failed login attempt for operator: {username}")
+            api.abort(401, "Invalid credentials")
+        finally:
+            db_session.close()
+
+@ns.route('/operator_logout')
+class OperatorLogout(Resource):
+    @api.doc(description='Operator logout')
+    def get(self):
+        session.pop('operator_id', None)
+        session.pop('operator_name', None)
+        session.pop('role', None)
+        logging.info("Operator logged out.")
+        return redirect(url_for('operator_login'))
+
+@ns.route('/admin_login')
+class AdminLogin(Resource):
+    @api.expect(admin_login_model)
+    @api.doc(description='Admin login')
+    @limiter.limit("10 per minute")
+    def post(self):
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        db_session = SessionLocal()
+        try:
+            admin = db_session.query(Admin).filter(Admin.username == username).first()
+            if admin and check_password_hash(admin.password_hash, password):
+                session['admin_id'] = admin.id
+                session['admin_username'] = admin.username
+                session['role'] = 'admin'
+                logging.info(f"Admin {username} logged in.")
+                return {
+                    "message": "Login successful",
+                    "admin_id": admin.id,
+                    "theme_preference": admin.theme_preference
+                }, 200
+            logging.warning(f"Failed login attempt for admin: {username}")
+            api.abort(401, "Invalid credentials")
+        finally:
+            db_session.close()
+
+@ns.route('/admin_logout')
+class AdminLogout(Resource):
+    @api.doc(description='Admin logout')
+    def get(self):
+        session.pop('admin_id', None)
+        session.pop('admin_username', None)
+        session.pop('role', None)
+        logging.info("Admin logged out.")
+        return redirect(url_for('admin_login'))
+
+@ns.route('/operator/<int:operator_id>/tickets')
+class OperatorTickets(Resource):
+    @api.doc(description='Get tickets for an operator')
+    @operator_required
+    def get(self, operator_id):
+        if session.get('operator_id') != operator_id:
+            api.abort(403)
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            tickets = db_session.query(Ticket.id, Ticket.number, Ticket.status, Ticket.priority, Ticket.created_at, Service.name.label('service_name')).\
+                join(Service, Ticket.service_id == Service.id).\
+                filter((Ticket.operator_id == operator_id) | (Ticket.status == 'waiting')).\
+                order_by(
+                    func.case(
+                        (Ticket.status == 'called', 1),
+                        (Ticket.status == 'waiting', 2),
+                        else_=3
+                    ),
+                    Ticket.priority.desc(),
+                    Ticket.created_at.asc()
+                ).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Ticket).filter((Ticket.operator_id == operator_id) | (Ticket.status == 'waiting')).count()
+            return {
+                "tickets": [{"id": t.id, "number": t.number, "status": t.status, "priority": t.priority, "created_at": t.created_at.isoformat(), "service_name": t.service_name} for t in tickets],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/operator/<int:operator_id>/call_next')
+class CallNextTicket(Resource):
+    @api.doc(description='Operator calls next ticket')
+    @operator_required
+    def post(self, operator_id):
+        if session.get('operator_id') != operator_id:
+            api.abort(403)
+        db_session = SessionLocal()
+        try:
+            current_called_ticket = db_session.query(Ticket).filter(Ticket.operator_id == operator_id, Ticket.status == 'called').first()
+            if current_called_ticket:
+                api.abort(400, "Operator already has a ticket in 'called' status.")
+
+            assigned_services = db_session.query(OperatorServiceAssignment.service_id).filter(OperatorServiceAssignment.operator_id == operator_id).all()
+            assigned_service_ids = [s.service_id for s in assigned_services]
+
+            query = db_session.query(Ticket).filter(Ticket.status == 'waiting')
+            if assigned_service_ids:
+                query = query.filter(Ticket.service_id.in_(assigned_service_ids))
+            next_ticket = query.order_by(Ticket.priority.desc(), Ticket.created_at.asc()).first()
+
+            if next_ticket:
+                now = get_current_tashkent_time()
+                next_ticket.status = 'called'
+                next_ticket.operator_id = operator_id
+                next_ticket.called_at = now
+                db_session.commit()
+
+                wait_time_seconds = (now - next_ticket.created_at).total_seconds()
+                update_statistics(
+                    date=now.strftime('%Y-%m-%d'),
+                    operator_id=operator_id,
+                    service_id=None,
+                    called_tickets=1,
+                    wait_time=wait_time_seconds
+                )
+
+                socketio.emit('update_queue', {'ticket': next_ticket.number, 'operator_id': operator_id})
+                logging.info(f"Operator {operator_id} called ticket {next_ticket.number}")
+
+                ticket_info = db_session.query(Ticket.client_telegram_chat_id, Service.name.label('service_name')).\
+                    join(Service, Ticket.service_id == Service.id).\
+                    filter(Ticket.id == next_ticket.id).first()
+                if ticket_info and ticket_info.client_telegram_chat_id:
+                    message = (
+                        f"Sizning <b>{ticket_info.service_name}</b> xizmati boʻyicha navbat raqamingiz <b>{next_ticket.number}</b> chaqirildi!\n"
+                        f"Iltimos, operatorga yondashing."
+                    )
+                    send_telegram_message_async.delay(ticket_info.client_telegram_chat_id, message)
+
+                trigger_webhook('ticket_called', {
+                    'ticket_number': next_ticket.number,
+                    'operator_id': operator_id,
+                    'called_at': now.isoformat()
+                })
+
+                return {"message": "Ticket called", "ticket_number": next_ticket.number}, 200
+            api.abort(404, "No waiting tickets available.")
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error calling next ticket for operator {operator_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/operator/<int:operator_id>/finish_ticket')
+class FinishTicket(Resource):
+    @api.doc(description='Operator finishes current ticket')
+    @operator_required
+    def post(self, operator_id):
+        if session.get('operator_id') != operator_id:
+            api.abort(403)
+        data = request.get_json()
+        ticket_number = data.get('ticket')
+        if not ticket_number:
+            api.abort(400, "Ticket number is required")
+        db_session = SessionLocal()
+        try:
+            ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number, Ticket.operator_id == operator_id, Ticket.status == 'called').first()
+            if not ticket:
+                api.abort(404, "Ticket not found or not in 'called' status for this operator.")
+
+            now = get_current_tashkent_time()
+            ticket.status = 'finished'
+            ticket.finished_at = now
+            db_session.commit()
+
+            service_time_seconds = (now - ticket.called_at).total_seconds()
+            update_statistics(
+                date=now.strftime('%Y-%m-%d'),
+                operator_id=operator_id,
+                service_id=ticket.service_id,
+                finished_tickets=1,
+                service_time=service_time_seconds
+            )
+
+            socketio.emit('remove_ticket', {'ticket': ticket_number, 'operator_id': operator_id})
+            logging.info(f"Operator {operator_id} finished ticket {ticket_number}")
+
+            if ticket.client_telegram_chat_id:
+                message = (
+                    f"Sizning navbat raqamingiz <b>{ticket_number}</b> boʻyicha xizmat tugallandi.\n"
+                    f"Fikr-mulohazalaringizni qoldirishingiz mumkin: {BASE_URL_FOR_QR}/feedback/{ticket_number}"
+                )
+                send_telegram_message_async.delay(ticket.client_telegram_chat_id, message)
+
+            trigger_webhook('ticket_finished', {
+                'ticket_number': ticket_number,
+                'operator_id': operator_id,
+                'finished_at': now.isoformat()
+            })
+
+            return {"message": "Ticket finished"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error finishing ticket {ticket_number} for operator {operator_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/operator/<int:operator_id>/cancel_ticket')
+class CancelTicket(Resource):
+    @api.doc(description='Operator cancels current ticket')
+    @operator_required
+    def post(self, operator_id):
+        if session.get('operator_id') != operator_id:
+            api.abort(403)
+        data = request.get_json()
+        ticket_number = data.get('ticket')
+        if not ticket_number:
+            api.abort(400, "Ticket number is required")
+        db_session = SessionLocal()
+        try:
+            ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number, Ticket.operator_id == operator_id, Ticket.status == 'called').first()
+            if not ticket:
+                api.abort(404, "Ticket not found or not in 'called' status for this operator.")
+
+            now = get_current_tashkent_time()
+            ticket.status = 'cancelled'
+            ticket.finished_at = now
+            db_session.commit()
+
+            update_statistics(
+                date=now.strftime('%Y-%m-%d'),
+                operator_id=operator_id,
+                service_id=ticket.service_id,
+                cancelled_tickets=1
+            )
+
+            socketio.emit('remove_ticket', {'ticket': ticket_number, 'operator_id': operator_id})
+            logging.info(f"Operator {operator_id} cancelled ticket {ticket_number}")
+
+            if ticket.client_telegram_chat_id:
+                message = (
+                    f"Sizning <b>{ticket_number}</b> navbat raqamingiz bekor qilindi.\n"
+                    f"Iltimos, qayta roʻyxatdan oʻting yoki operatorga murojaat qiling."
+                )
+                send_telegram_message_async.delay(ticket.client_telegram_chat_id, message)
+
+            trigger_webhook('ticket_cancelled', {
+                'ticket_number': ticket_number,
+                'operator_id': operator_id,
+                'cancelled_at': now.isoformat()
+            })
+
+            return {"message": "Ticket cancelled"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error cancelling ticket {ticket_number} for operator {operator_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/operator/<int:operator_id>/redirect_ticket')
+class RedirectTicket(Resource):
+    @api.doc(description='Operator redirects a ticket')
+    @operator_required
+    def post(self, operator_id):
+        if session.get('operator_id') != operator_id:
+            api.abort(403)
+        data = request.get_json()
+        ticket_number = data.get('ticket_number')
+        new_service_id = data.get('new_service_id')
+        new_operator_id = data.get('new_operator_id')
+
+        if not ticket_number or not new_service_id:
+            api.abort(400, "Ticket number and new service ID are required")
+
+        db_session = SessionLocal()
+        try:
+            ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number, Ticket.operator_id == operator_id, Ticket.status == 'called').first()
+            if not ticket:
+                api.abort(404, "Ticket not found or not in 'called' status for this operator.")
+
+            now = get_current_tashkent_time()
+            ticket.status = 'redirected'
+            ticket.finished_at = now
+
+            new_service = db_session.query(Service).filter(Service.id == new_service_id).first()
+            if not new_service:
+                api.abort(404, "New service not found")
+
+            new_ticket_number = generate_ticket_number(new_service.category_id, new_service.subcategory_id, db_session)
+            new_ticket = Ticket(
+                number=new_ticket_number,
+                service_id=new_service_id,
+                client_telegram_chat_id=ticket.client_telegram_chat_id,
+                status='waiting',
+                created_at=now,
+                redirected_from_ticket_id=ticket.id,
+                operator_id=new_operator_id,
+                priority=ticket.priority
+            )
+            db_session.add(new_ticket)
+            db_session.commit()
+
+            update_statistics(
+                date=now.strftime('%Y-%m-%d'),
+                operator_id=operator_id,
+                service_id=ticket.service_id,
+                redirected_tickets=1
+            )
+
+            socketio.emit('remove_ticket', {'ticket': ticket_number, 'operator_id': operator_id})
+            socketio.emit('update_queue', {'ticket': new_ticket_number, 'operator_id': new_operator_id or 'N/A'})
+            logging.info(f"Operator {operator_id} redirected ticket {ticket_number} to new ticket {new_ticket_number}")
+
+            if ticket.client_telegram_chat_id:
+                new_service_name = new_service.name
+                message = (
+                    f"Sizning navbat raqamingiz <b>{ticket_number}</b> boshqa xizmatga yoʻnaltirildi.\n"
+                    f"Yangi navbat raqamingiz: <b>{new_ticket_number}</b> (Xizmat: {new_service_name}).\n"
+                    f"Navbat holatini tekshirish: {BASE_URL_FOR_QR}/status/{new_ticket_number}"
+                )
+                send_telegram_message_async.delay(ticket.client_telegram_chat_id, message)
+
+            trigger_webhook('ticket_redirected', {
+                'original_ticket_number': ticket_number,
+                'new_ticket_number': new_ticket_number,
+                'operator_id': operator_id,
+                'new_service_id': new_service_id,
+                'new_operator_id': new_operator_id,
+                'redirected_at': now.isoformat()
+            })
+
+            return {"message": "Ticket redirected successfully", "new_ticket_number": new_ticket_number}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error redirecting ticket {ticket_number} for operator {operator_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/chat_history/<string:ticket_number>')
+class ChatHistory(Resource):
+    @api.doc(description='Get chat history for a ticket')
+    def get(self, ticket_number):
+        db_session = SessionLocal()
+        try:
+            messages = db_session.query(ChatMessage).filter(ChatMessage.ticket_number == ticket_number).order_by(ChatMessage.created_at.asc()).all()
+            return [{
+                "sender_type": m.sender_type,
+                "content": m.content,
+                "file_url": m.file_url,
+                "file_type": m.file_type,
+                "created_at": m.created_at.isoformat()
+            } for m in messages]
+        finally:
+            db_session.close()
+
+@ns.route('/chat_upload')
+class ChatUpload(Resource):
+    @api.expect(media_model)
+    @api.doc(description='Upload file for chat')
+    def post(self):
+        if 'file' not in request.files:
+            api.abort(400, "No file part")
+        file = request.files['file']
+        if file.filename == '':
+            api.abort(400, "No selected file")
+        if file:
+            filename = secure_filename(file.filename)
+            file_extension = filename.rsplit('.', 1)[1].lower()
+            unique_filename = f"{uuid.uuid4().hex}_{filename}"
+            filepath = os.path.join(MEDIA_FOLDER, unique_filename)
+            file.save(filepath)
+
+            file_type = 'document'
+            if file_extension in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']:
+                file_type = 'image'
+            elif file_extension in ['mp4', 'webm', 'ogg']:
+                file_type = 'video'
+            elif file_extension in ['mp3', 'wav', 'aac']:
+                file_type = 'audio'
+
+            file_url = f"{BASE_URL_FOR_QR}/{filepath}"
+            logging.info(f"File uploaded: {file_url} with type {file_type}")
+            return {"message": "File uploaded successfully", "file_url": file_url, "file_type": file_type}, 200
+        api.abort(500, "File upload failed")
+
+@ns.route('/admin/categories')
+class AdminCategories(Resource):
+    @api.doc(description='Get all categories for admin')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            categories = db_session.query(Category).order_by(Category.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Category).count()
+            return {
+                "categories": [{"id": c.id, "name": c.name} for c in categories],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+    @api.expect(category_model)
+    @api.doc(description='Add a new category')
+    @admin_required
+    def post(self):
+        data = request.get_json()
+        name = data.get('name')
+        if not name:
+            api.abort(400, "Category name is required")
+        db_session = SessionLocal()
+        try:
+            category = Category(name=name)
+            db_session.add(category)
+            db_session.commit()
+            logging.info(f"Admin added category: {name}")
+            return {"message": "Category added successfully"}, 201
+        except Exception as e:
+            db_session.rollback()
+            if "unique constraint" in str(e).lower():
+                api.abort(409, "Category with this name already exists")
+            logging.error(f"Error adding category: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/categories/<int:category_id>')
+class AdminCategory(Resource):
+    @api.expect(category_model)
+    @api.doc(description='Update a category')
+    @admin_required
+    def put(self, category_id):
+        data = request.get_json()
+        name = data.get('name')
+        if not name:
+            api.abort(400, "Category name is required")
+        db_session = SessionLocal()
+        try:
+            category = db_session.query(Category).filter(Category.id == category_id).first()
+            if not category:
+                api.abort(404, "Category not found")
+            category.name = name
+            db_session.commit()
+            logging.info(f"Admin updated category {category_id} to: {name}")
+            return {"message": "Category updated successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            if "unique constraint" in str(e).lower():
+                api.abort(409, "Category with this name already exists")
+            logging.error(f"Error updating category {category_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+    @api.doc(description='Delete a category')
+    @admin_required
+    def delete(self, category_id):
+        db_session = SessionLocal()
+        try:
+            category = db_session.query(Category).filter(Category.id == category_id).first()
+            if not category:
+                api.abort(404, "Category not found")
+            db_session.delete(category)
+            db_session.commit()
+            logging.info(f"Admin deleted category: {category_id}")
+            return {"message": "Category deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting category {category_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/subcategories')
+class AdminSubcategories(Resource):
+    @api.doc(description='Get all subcategories for admin')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            subcategories = db_session.query(Subcategory, Category.name.label('category_name')).\
+                join(Category, Subcategory.category_id == Category.id).\
+                order_by(Category.name.asc(), Subcategory.name.asc()).\
+                offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Subcategory).count()
+            return {
+                "subcategories": [{"id": s.Subcategory.id, "name": s.Subcategory.name, "category_id": s.Subcategory.category_id, "category_name": s.category_name} for s in subcategories],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+    @api.expect(subcategory_model)
+    @api.doc(description='Add a new subcategory')
+    @admin_required
+    def post(self):
+        data = request.get_json()
+        name = data.get('name')
+        category_id = data.get('category_id')
+        if not name or not category_id:
+            api.abort(400, "Subcategory name and category ID are required")
+        db_session = SessionLocal()
+        try:
+            subcategory = Subcategory(name=name, category_id=category_id)
+            db_session.add(subcategory)
+            db_session.commit()
+            logging.info(f"Admin added subcategory: {name}")
+            return {"message": "Subcategory added successfully"}, 201
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error adding subcategory: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/subcategories/<int:subcategory_id>')
+class AdminSubcategory(Resource):
+    @api.expect(subcategory_model)
+    @api.doc(description='Update a subcategory')
+    @admin_required
+    def put(self, subcategory_id):
+        data = request.get_json()
+        name = data.get('name')
+        category_id = data.get('category_id')
+        if not name or not category_id:
+            api.abort(400, "Subcategory name and category ID are required")
+        db_session = SessionLocal()
+        try:
+            subcategory = db_session.query(Subcategory).filter(Subcategory.id == subcategory_id).first()
+            if not subcategory:
+                api.abort(404, "Subcategory not found")
+            subcategory.name = name
+            subcategory.category_id = category_id
+            db_session.commit()
+            logging.info(f"Admin updated subcategory {subcategory_id}")
+            return {"message": "Subcategory updated successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error updating subcategory {subcategory_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+    @api.doc(description='Delete a subcategory')
+    @admin_required
+    def delete(self, subcategory_id):
+        db_session = SessionLocal()
+        try:
+            subcategory = db_session.query(Subcategory).filter(Subcategory.id == subcategory_id).first()
+            if not subcategory:
+                api.abort(404, "Subcategory not found")
+            db_session.delete(subcategory)
+            db_session.commit()
+            logging.info(f"Admin deleted subcategory: {subcategory_id}")
+            return {"message": "Subcategory deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting subcategory {subcategory_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/services')
+class AdminServices(Resource):
+    @api.doc(description='Get all services for admin')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            services = db_session.query(Service, Category.name.label('category_name'), Subcategory.name.label('subcategory_name')).\
+                join(Category, Service.category_id == Category.id).\
+                outerjoin(Subcategory, Service.subcategory_id == Subcategory.id).\
+                order_by(Category.name.asc(), Subcategory.name.asc(), Service.name.asc()).\
+                offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Service).count()
+            return {
+                "services": [{
+                    "id": s.Service.id,
+                    "name": s.Service.name,
+                    "category_id": s.Service.category_id,
+                    "subcategory_id": s.Service.subcategory_id,
+                    "estimated_time": s.Service.estimated_time,
+                    "category_name": s.category_name,
+                    "subcategory_name": s.subcategory_name
+                } for s in services],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+    @api.expect(service_model)
+    @api.doc(description='Add a new service')
+    @admin_required
+    def post(self):
+        data = request.get_json()
+        name = data.get('name')
+        category_id = data.get('category_id')
+        subcategory_id = data.get('subcategory_id')
+        estimated_time = data.get('estimated_time')
+        if not name or not category_id:
+            api.abort(400, "Service name and category ID are required")
+        db_session = SessionLocal()
+        try:
+            service = Service(name=name, category_id=category_id, subcategory_id=subcategory_id, estimated_time=estimated_time)
+            db_session.add(service)
+            db_session.commit()
+            logging.info(f"Admin added service: {name}")
+            return {"message": "Service added successfully"}, 201
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error adding service: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/services/<int:service_id>')
+class AdminService(Resource):
+    @api.expect(service_model)
+    @api.doc(description='Update a service')
+    @admin_required
+    def put(self, service_id):
+        data = request.get_json()
+        name = data.get('name')
+        category_id = data.get('category_id')
+        subcategory_id = data.get('subcategory_id')
+        estimated_time = data.get('estimated_time')
+        if not name or not category_id:
+            api.abort(400, "Service name and category ID are required")
+        db_session = SessionLocal()
+        try:
+            service = db_session.query(Service).filter(Service.id == service_id).first()
+            if not service:
+                api.abort(404, "Service not found")
+            service.name = name
+            service.category_id = category_id
+            service.subcategory_id = subcategory_id
+            service.estimated_time = estimated_time
+            db_session.commit()
+            logging.info(f"Admin updated service {service_id}")
+            return {"message": "Service updated successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error updating service {service_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+    @api.doc(description='Delete a service')
+    @admin_required
+    def delete(self, service_id):
+        db_session = SessionLocal()
+        try:
+            service = db_session.query(Service).filter(Service.id == service_id).first()
+            if not service:
+                api.abort(404, "Service not found")
+            db_session.delete(service)
+            db_session.commit()
+            logging.info(f"Admin deleted service: {service_id}")
+            return {"message": "Service deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting service {service_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/services')
+class Services(Resource):
+    @api.doc(description='Get services filtered by category or subcategory')
+    def get(self):
+        category_id = request.args.get('category_id')
+        subcategory_id = request.args.get('subcategory_id')
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            query = db_session.query(Service)
+            if subcategory_id:
+                query = query.filter(Service.subcategory_id == subcategory_id)
+            elif category_id:
+                query = query.filter(Service.category_id == category_id)
+            services = query.order_by(Service.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = query.count()
+            return {
+                "services": [{"id": s.id, "name": s.name, "category_id": s.category_id, "subcategory_id": s.subcategory_id, "estimated_time": s.estimated_time} for s in services],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/service/<int:service_id>/queue_info')
+class ServiceQueueInfo(Resource):
+    @api.doc(description='Get queue info for a service')
+    def get(self, service_id):
+        db_session = SessionLocal()
+        try:
+            queue_count = db_session.query(Ticket).filter(Ticket.service_id == service_id, Ticket.status == 'waiting').count()
+            svc_stat = db_session.query(ServiceStatistics).filter(ServiceStatistics.service_id == service_id).order_by(ServiceStatistics.date.desc()).first()
+            avg_time = svc_stat.avg_service_time if svc_stat and svc_stat.avg_service_time else None
+            if not avg_time:
+                service = db_session.query(Service).filter(Service.id == service_id).first()
+                avg_time = service.estimated_time * 60 if service and service.estimated_time else 0
+            estimated_wait = int(queue_count * (avg_time or 0))
+            return {
+                "queue_count": queue_count,
+                "estimated_wait_seconds": estimated_wait
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/admin/operators')
+class AdminOperators(Resource):
+    @api.doc(description='Get all operators for admin')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            operators = db_session.query(Operator).order_by(Operator.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Operator).count()
+            operators_list = []
+            for op in operators:
+                assigned_services = db_session.query(OperatorServiceAssignment.service_id).filter(OperatorServiceAssignment.operator_id == op.id).all()
+                operators_list.append({
+                    "id": op.id,
+                    "name": op.name,
+                    "operator_number": op.operator_number,
+                    "telegram_chat_id": op.telegram_chat_id,
+                    "theme_preference": op.theme_preference,
+                    "assigned_services": [s.service_id for s in assigned_services]
+                })
+            return {
+                "operators": operators_list,
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+    @api.expect(operator_model)
+    @api.doc(description='Add a new operator')
+    @admin_required
+    def post(self):
+        data = request.get_json()
+        name = data.get('name')
+        operator_number = data.get('operator_number')
+        password = data.get('password')
+        telegram_chat_id = data.get('telegram_chat_id')
+        assigned_services = data.get('assigned_services', [])
+        if not name or not operator_number or not password:
+            api.abort(400, "Name, operator number, and password are required")
+        db_session = SessionLocal()
+        try:
+            hashed_password = generate_password_hash(password)
+            operator = Operator(name=name, operator_number=operator_number, password_hash=hashed_password, telegram_chat_id=telegram_chat_id)
+            db_session.add(operator)
+            db_session.flush()
+            for service_id in assigned_services:
+                db_session.add(OperatorServiceAssignment(operator_id=operator.id, service_id=service_id))
+            db_session.commit()
+            logging.info(f"Admin added operator: {name} ({operator_number})")
+            return {"message": "Operator added successfully"}, 201
+        except Exception as e:
+            db_session.rollback()
+            if "unique constraint" in str(e).lower():
+                api.abort(409, "Operator number or Telegram ID already exists")
+            logging.error(f"Error adding operator: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/operators/<int:operator_id>')
+class AdminOperator(Resource):
+    @api.expect(operator_model)
+    @api.doc(description='Update an operator')
+    @admin_required
+    def put(self, operator_id):
+        data = request.get_json()
+        name = data.get('name')
+        operator_number = data.get('operator_number')
+        telegram_chat_id = data.get('telegram_chat_id')
+        assigned_services = data.get('assigned_services', [])
+        if not name or not operator_number:
+            api.abort(400, "Name and operator number are required")
+        db_session = SessionLocal()
+        try:
+            operator = db_session.query(Operator).filter(Operator.id == operator_id).first()
+            if not operator:
+                api.abort(404, "Operator not found")
+            operator.name = name
+            operator.operator_number = operator_number
+            operator.telegram_chat_id = telegram_chat_id
+            db_session.query(OperatorServiceAssignment).filter(OperatorServiceAssignment.operator_id == operator_id).delete()
+            for service_id in assigned_services:
+                db_session.add(OperatorServiceAssignment(operator_id=operator_id, service_id=service_id))
+            db_session.commit()
+            logging.info(f"Admin updated operator {operator_id}: {name} ({operator_number})")
+            return {"message": "Operator updated successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            if "unique constraint" in str(e).lower():
+                api.abort(409, "Operator number or Telegram ID already exists")
+            logging.error(f"Error updating operator {operator_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+    @api.doc(description='Delete an operator')
+    @admin_required
+    def delete(self, operator_id):
+        db_session = SessionLocal()
+        try:
+            operator = db_session.query(Operator).filter(Operator.id == operator_id).first()
+            if not operator:
+                api.abort(404, "Operator not found")
+            db_session.delete(operator)
+            db_session.commit()
+            logging.info(f"Admin deleted operator: {operator_id}")
+            return {"message": "Operator deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting operator {operator_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/operators/<int:operator_id>/reset_password')
+class AdminOperatorResetPassword(Resource):
+    @api.doc(description='Reset operator password')
+    @admin_required
+    def post(self, operator_id):
+        db_session = SessionLocal()
+        try:
+            operator = db_session.query(Operator).filter(Operator.id == operator_id).first()
+            if not operator:
+                api.abort(404, "Operator not found")
+            new_password = secrets.token_hex(16)
+            hashed_password = generate_password_hash(new_password)
+            operator.password_hash = hashed_password
+            db_session.commit()
+
+            if operator.telegram_chat_id:
+                message = (
+                    f"Sizning operator paneli parolingiz tiklandi.\n"
+                    f"Yangi parol: <b>{new_password}</b>\n"
+                    f"Iltimos, tizimga kirgandan soʻng parolingizni oʻzgartiring."
+                )
+                send_telegram_message_async.delay(operator.telegram_chat_id, message)
             else:
-                c.execute("UPDATE operators SET name = ?, status = ?, operator_number = ? WHERE id = ?",
-                          (name, status, operator_number, operator_id))
-            if c.rowcount == 0:
-                return jsonify({"status": "error", "message": "Operator not found"}), 404
-            conn.commit()
-            logging.info(f"Edited operator {operator_id}: {name}, status: {status}")
-            return jsonify({"status": "ok"})
-        except sqlite3.IntegrityError:
-            logging.error(f"Failed to edit operator {operator_id}: duplicate operator number")
-            return jsonify({"status": "error", "message": "Operator number already exists"}), 400
+                logging.warning(f"Operator {operator_id} has no Telegram ID for password reset notification.")
+                return {"message": "Password reset successfully, but operator has no Telegram ID for notification."}, 200
 
-@app.route('/delete_operator', methods=['POST'])
-@admin_required
-def delete_operator():
-    """Delete an operator and their service assignments."""
-    data = request.get_json() or {}
-    operator_id = data.get('id', type=int)
-    if not operator_id:
-        return jsonify({"status": "error", "message": "Operator ID is required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM operator_services WHERE operator_id = ?", (operator_id,))
-        c.execute("DELETE FROM operators WHERE id = ?", (operator_id,))
-        if c.rowcount == 0:
-            return jsonify({"status": "error", "message": "Operator not found"}), 404
-        conn.commit()
-        logging.info(f"Deleted operator {operator_id}")
-        return jsonify({"status": "ok"})
+            logging.info(f"Admin reset password for operator {operator_id}")
+            return {"message": "Password reset successfully. New password sent to operator via Telegram."}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error resetting password for operator {operator_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
 
-@app.route('/assign_service', methods=['POST'])
-@admin_required
-def assign_service():
-    """Assign a service to an operator."""
-    data = request.get_json() or {}
-    operator_id = data.get('operator_id', type=int)
-    service_id = data.get('service_id', type=int)
-    if not operator_id or not service_id:
-        return jsonify({"status": "error", "message": "Operator ID and service ID are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM operator_services WHERE operator_id = ? AND service_id = ?",
-                  (operator_id, service_id))
-        if c.fetchone()[0] > 0:
-            logging.warning(f"Service {service_id} already assigned to operator {operator_id}")
-            return jsonify({"status": "error", "message": "Service already assigned"}), 400
-        c.execute("INSERT INTO operator_services (operator_id, service_id) VALUES (?, ?)",
-                  (operator_id, service_id))
-        conn.commit()
-        logging.info(f"Assigned service {service_id} to operator {operator_id}")
-        return jsonify({"status": "ok"})
+@ns.route('/operators')
+class Operators(Resource):
+    @api.doc(description='Get all operators')
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            operators = db_session.query(Operator).order_by(Operator.name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Operator).count()
+            return {
+                "operators": [{"id": o.id, "name": o.name, "operator_number": o.operator_number} for o in operators],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
 
-@app.route('/unassign_service', methods=['POST'])
-@admin_required
-def unassign_service():
-    """Unassign a service from an operator."""
-    data = request.get_json() or {}
-    operator_id = data.get('operator_id', type=int)
-    service_id = data.get('service_id', type=int)
-    if not operator_id or not service_id:
-        return jsonify({"status": "error", "message": "Operator ID and service ID are required"}), 400
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM operator_services WHERE operator_id = ? AND service_id = ?",
-                  (operator_id, service_id))
-        if c.rowcount == 0:
-            return jsonify({"status": "error", "message": "Assignment not found"}), 404
-        conn.commit()
-        logging.info(f"Unassigned service {service_id} from operator {operator_id}")
-        return jsonify({"status": "ok"})
+@ns.route('/admin/media')
+class AdminMedia(Resource):
+    @api.doc(description='Get all media files for admin')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            media_files = db_session.query(MediaFile).order_by(MediaFile.uploaded_at.desc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(MediaFile).count()
+            return {
+                "media_files": [{
+                    "id": m.id,
+                    "filename": m.filename,
+                    "file_url": f"{BASE_URL_FOR_QR}/{m.filepath}",
+                    "file_type": m.file_type,
+                    "uploaded_at": m.uploaded_at.isoformat()
+                } for m in media_files],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
 
-@app.route('/display')
-def display():
-    """Render the display panel."""
-    return render_template('display.html', server_url=SERVER_URL)
+    @api.expect(media_model)
+    @api.doc(description='Upload a media file')
+    @admin_required
+    def post(self):
+        if 'file' not in request.files:
+            api.abort(400, "No file part")
+        file = request.files['file']
+        if file.filename == '':
+            api.abort(400, "No selected file")
+        if file:
+            filename = secure_filename(file.filename)
+            file_extension = filename.rsplit('.', 1)[1].lower()
+            unique_filename = f"{uuid.uuid4().hex}_{filename}"
+            filepath = os.path.join(MEDIA_FOLDER, unique_filename)
+            try:
+                file.save(filepath)
+                file_type = 'application/octet-stream'
+                if file_extension in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']:
+                    file_type = 'image'
+                elif file_extension in ['mp4', 'webm', 'ogg']:
+                    file_type = 'video'
+                elif file_extension in ['mp3', 'wav', 'aac']:
+                    file_type = 'audio'
+                elif file_extension in ['pdf']:
+                    file_type = 'application/pdf'
+                elif file_extension in ['doc', 'docx']:
+                    file_type = 'application/msword'
+                elif file_extension in ['xls', 'xlsx']:
+                    file_type = 'application/vnd.ms-excel'
+                elif file_extension in ['txt']:
+                    file_type = 'text/plain'
 
-@app.route('/tablet/<int:operator_id>')
-@login_required
-def tablet(operator_id):
-    """Render the tablet interface for an operator."""
-    if session['operator_id'] != operator_id:
-        abort(403)
-    return render_template('tablet.html', operator_id=operator_id, server_url=SERVER_URL)
+                db_session = SessionLocal()
+                try:
+                    media = MediaFile(filename=unique_filename, filepath=filepath, file_type=file_type)
+                    db_session.add(media)
+                    db_session.commit()
+                    logging.info(f"Admin uploaded media file: {unique_filename} ({file_type})")
+                    return {"message": "Media file uploaded successfully", "filename": unique_filename, "file_type": file_type}, 201
+                except Exception as e:
+                    db_session.rollback()
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                    logging.error(f"Error uploading media file: {e}")
+                    api.abort(500, str(e))
+                finally:
+                    db_session.close()
+            except Exception as e:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                logging.error(f"Error saving media file: {e}")
+                api.abort(500, str(e))
+        api.abort(500, "File upload failed")
 
-@app.route('/get_queue')
-def get_queue():
-    """Fetch the current queue of called tickets."""
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT t.number, o.name, o.operator_number FROM tickets t "
-                  "LEFT JOIN operators o ON t.operator_id = o.id "
-                  "WHERE t.status = 'called' ORDER BY t.created_at")
-        tickets = [{
-            "ticket": row[0],
-            "operator_name": row[1],
-            "operator_number": row[2]
-        } for row in c.fetchall()]
-        logging.info(f"Fetched {len(tickets)} called tickets for queue")
-        return jsonify(tickets)
+@ns.route('/admin/media/<int:media_id>')
+class AdminMediaFile(Resource):
+    @api.doc(description='Delete a media file')
+    @admin_required
+    def delete(self, media_id):
+        db_session = SessionLocal()
+        try:
+            media = db_session.query(MediaFile).filter(MediaFile.id == media_id).first()
+            if not media:
+                api.abort(404, "Media file not found")
+            filepath = media.filepath
+            if os.path.exists(filepath):
+                os.remove(filepath)
+                logging.info(f"Deleted media file from disk: {filepath}")
+            db_session.delete(media)
+            db_session.commit()
+            logging.info(f"Admin deleted media file from DB: {media_id}")
+            return {"message": "Media file deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting media file {media_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
 
-@app.route('/operator/<int:operator_id>/tickets')
-@login_required
-def operator_tickets(operator_id):
-    """Fetch tickets assigned to an operator."""
-    if session['operator_id'] != operator_id:
-        abort(403)
-    with sqlite3.connect(DB_PATH) as conn:
-        c = conn.cursor()
-        c.execute("SELECT number, status, created_at FROM tickets WHERE operator_id = ? "
-                  "AND status IN ('waiting', 'called') ORDER BY created_at",
-                  (operator_id,))
-        tickets = [{
-            "number": row[0],
-            "status": row[1],
-            "created_at": row[2]
-        } for row in c.fetchall()]
-        logging.info(f"Fetched {len(tickets)} tickets for operator {operator_id}")
-        return jsonify(tickets)
+@ns.route('/languages')
+class Languages(Resource):
+    @api.doc(description='Get all languages')
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            languages = db_session.query(Language).order_by(Language.display_name.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Language).count()
+            return {
+                "languages": [{"id": l.id, "lang_code": l.lang_code, "display_name": l.display_name} for l in languages],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/translations')
+class Translations(Resource):
+    @api.doc(description='Get all translations from JSON file')
+    def get(self):
+        return load_translations_from_file()
+
+@ns.route('/translations/<string:lang_code>')
+class TranslationsLang(Resource):
+    @api.doc(description='Get translations for a specific language')
+    def get(self, lang_code):
+        translations = load_translations_from_file()
+        return translations.get(lang_code, {})
+
+@ns.route('/admin/languages')
+class AdminLanguages(Resource):
+    @api.expect(language_model)
+    @api.doc(description='Add a new language')
+    @admin_required
+    def post(self):
+        data = request.get_json()
+        lang_code = data.get('lang_code')
+        display_name = data.get('display_name')
+        if not lang_code or not display_name:
+            api.abort(400, "Language code and display name are required")
+        db_session = SessionLocal()
+        try:
+            language = Language(lang_code=lang_code, display_name=display_name)
+            db_session.add(language)
+            db_session.commit()
+            logging.info(f"Admin added language: {display_name} ({lang_code})")
+            return {"message": "Language added successfully"}, 201
+        except Exception as e:
+            db_session.rollback()
+            if "unique constraint" in str(e).lower():
+                api.abort(409, "Language with this code already exists")
+            logging.error(f"Error adding language: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/languages/<int:language_id>')
+class AdminLanguage(Resource):
+    @api.expect(language_model)
+    @api.doc(description='Update a language')
+    @admin_required
+    def put(self, language_id):
+        data = request.get_json()
+        display_name = data.get('display_name')
+        if not display_name:
+            api.abort(400, "Display name is required")
+        db_session = SessionLocal()
+        try:
+            language = db_session.query(Language).filter(Language.id == language_id).first()
+            if not language:
+                api.abort(404, "Language not found")
+            language.display_name = display_name
+            db_session.commit()
+            logging.info(f"Admin updated language {language_id} to: {display_name}")
+            return {"message": "Language updated successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error updating language {language_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+    @api.doc(description='Delete a language')
+    @admin_required
+    def delete(self, language_id):
+        db_session = SessionLocal()
+        try:
+            language = db_session.query(Language).filter(Language.id == language_id).first()
+            if not language:
+                api.abort(404, "Language not found")
+            db_session.delete(language)
+            db_session.commit()
+            logging.info(f"Admin deleted language: {language_id}")
+            return {"message": "Language deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting language {language_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/webhooks')
+class AdminWebhooks(Resource):
+    @api.doc(description='Get all webhooks for admin')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            webhooks = db_session.query(Webhook).order_by(Webhook.event_type.asc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(Webhook).count()
+            return {
+                "webhooks": [{"id": w.id, "event_type": w.event_type, "url": w.url} for w in webhooks],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+    @api.expect(webhook_model)
+    @api.doc(description='Add a new webhook')
+    @admin_required
+    def post(self):
+        data = request.get_json()
+        event_type = data.get('event_type')
+        url = data.get('url')
+        if not event_type or not url:
+            api.abort(400, "Event type and URL are required")
+        db_session = SessionLocal()
+        try:
+            webhook = Webhook(event_type=event_type, url=url)
+            db_session.add(webhook)
+            db_session.commit()
+            logging.info(f"Admin added webhook for event: {event_type}")
+            return {"message": "Webhook added successfully"}, 201
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error adding webhook: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/webhooks/<int:webhook_id>')
+class AdminWebhook(Resource):
+    @api.expect(webhook_model)
+    @api.doc(description='Update a webhook')
+    @admin_required
+    def put(self, webhook_id):
+        data = request.get_json()
+        event_type = data.get('event_type')
+        url = data.get('url')
+        if not event_type or not url:
+            api.abort(400, "Event type and URL are required")
+        db_session = SessionLocal()
+        try:
+            webhook = db_session.query(Webhook).filter(Webhook.id == webhook_id).first()
+            if not webhook:
+                api.abort(404, "Webhook not found")
+            webhook.event_type = event_type
+            webhook.url = url
+            db_session.commit()
+            logging.info(f"Admin updated webhook {webhook_id}")
+            return {"message": "Webhook updated successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error updating webhook {webhook_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+    @api.doc(description='Delete a webhook')
+    @admin_required
+    def delete(self, webhook_id):
+        db_session = SessionLocal()
+        try:
+            webhook = db_session.query(Webhook).filter(Webhook.id == webhook_id).first()
+            if not webhook:
+                api.abort(404, "Webhook not found")
+            db_session.delete(webhook)
+            db_session.commit()
+            logging.info(f"Admin deleted webhook: {webhook_id}")
+            return {"message": "Webhook deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting webhook {webhook_id}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/admin/statistics/daily')
+class AdminDailyStatistics(Resource):
+    @api.doc(description='Get daily statistics')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        db_session = SessionLocal()
+        try:
+            stats = db_session.query(DailyStatistics).order_by(DailyStatistics.date.desc()).offset((page-1)*per_page).limit(per_page).all()
+            total = db_session.query(DailyStatistics).count()
+            return {
+                "statistics": [{
+                    "id": s.id,
+                    "date": s.date,
+                    "total_tickets": s.total_tickets,
+                    "finished_tickets": s.finished_tickets,
+                    "cancelled_tickets": s.cancelled_tickets,
+                    "redirected_tickets": s.redirected_tickets,
+                    "avg_wait_time": s.avg_wait_time,
+                    "avg_service_time": s.avg_service_time
+                } for s in stats],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/admin/statistics/operators')
+class AdminOperatorStatistics(Resource):
+    @api.doc(description='Get operator statistics')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        date_filter = request.args.get('date')
+        db_session = SessionLocal()
+        try:
+            query = db_session.query(OperatorStatistics, Operator.name.label('operator_name')).\
+                join(Operator, OperatorStatistics.operator_id == Operator.id)
+            if date_filter:
+                query = query.filter(OperatorStatistics.date == date_filter)
+            stats = query.order_by(OperatorStatistics.date.desc()).offset((page-1)*per_page).limit(per_page).all()
+            total = query.count()
+            return {
+                "statistics": [{
+                    "id": s.OperatorStatistics.id,
+                    "operator_id": s.OperatorStatistics.operator_id,
+                    "operator_name": s.operator_name,
+                    "date": s.OperatorStatistics.date,
+                    "called_tickets": s.OperatorStatistics.called_tickets,
+                    "finished_tickets": s.OperatorStatistics.finished_tickets,
+                    "cancelled_tickets": s.OperatorStatistics.cancelled_tickets,
+                    "redirected_tickets": s.OperatorStatistics.redirected_tickets,
+                    "avg_wait_time": s.OperatorStatistics.avg_wait_time,
+                    "avg_service_time": s.OperatorStatistics.avg_service_time
+                } for s in stats],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/admin/statistics/services')
+class AdminServiceStatistics(Resource):
+    @api.doc(description='Get service statistics')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        date_filter = request.args.get('date')
+        db_session = SessionLocal()
+        try:
+            query = db_session.query(ServiceStatistics, Service.name.label('service_name')).\
+                join(Service, ServiceStatistics.service_id == Service.id)
+            if date_filter:
+                query = query.filter(ServiceStatistics.date == date_filter)
+            stats = query.order_by(ServiceStatistics.date.desc()).offset((page-1)*per_page).limit(per_page).all()
+            total = query.count()
+            return {
+                "statistics": [{
+                    "id": s.ServiceStatistics.id,
+                    "service_id": s.ServiceStatistics.service_id,
+                    "service_name": s.service_name,
+                    "date": s.ServiceStatistics.date,
+                    "called_tickets": s.ServiceStatistics.called_tickets,
+                    "finished_tickets": s.ServiceStatistics.finished_tickets,
+                    "cancelled_tickets": s.ServiceStatistics.cancelled_tickets,
+                    "redirected_tickets": s.ServiceStatistics.redirected_tickets,
+                    "avg_wait_time": s.ServiceStatistics.avg_wait_time,
+                    "avg_service_time": s.ServiceStatistics.avg_service_time
+                } for s in stats],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/admin/statistics/export')
+class AdminStatisticsExport(Resource):
+    @api.doc(description='Export statistics as Excel')
+    @admin_required
+    def get(self):
+        stat_type = request.args.get('type', 'daily')
+        date_filter = request.args.get('date')
+        db_session = SessionLocal()
+        try:
+            if stat_type == 'daily':
+                query = db_session.query(DailyStatistics)
+                if date_filter:
+                    query = query.filter(DailyStatistics.date == date_filter)
+                stats = query.order_by(DailyStatistics.date.desc()).all()
+                data = [{
+                    'Date': s.date,
+                    'Total Tickets': s.total_tickets,
+                    'Finished Tickets': s.finished_tickets,
+                    'Cancelled Tickets': s.cancelled_tickets,
+                    'Redirected Tickets': s.redirected_tickets,
+                    'Avg Wait Time (s)': s.avg_wait_time,
+                    'Avg Service Time (s)': s.avg_service_time
+                } for s in stats]
+                filename = f"daily_statistics_{get_current_tashkent_time().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            elif stat_type == 'operators':
+                query = db_session.query(OperatorStatistics, Operator.name.label('operator_name')).\
+                    join(Operator, OperatorStatistics.operator_id == Operator.id)
+                if date_filter:
+                    query = query.filter(OperatorStatistics.date == date_filter)
+                stats = query.order_by(OperatorStatistics.date.desc()).all()
+                data = [{
+                    'Date': s.OperatorStatistics.date,
+                    'Operator': s.operator_name,
+                    'Called Tickets': s.OperatorStatistics.called_tickets,
+                    'Finished Tickets': s.OperatorStatistics.finished_tickets,
+                    'Cancelled Tickets': s.OperatorStatistics.cancelled_tickets,
+                    'Redirected Tickets': s.OperatorStatistics.redirected_tickets,
+                    'Avg Wait Time (s)': s.OperatorStatistics.avg_wait_time,
+                    'Avg Service Time (s)': s.OperatorStatistics.avg_service_time
+                } for s in stats]
+                filename = f"operator_statistics_{get_current_tashkent_time().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            elif stat_type == 'services':
+                query = db_session.query(ServiceStatistics, Service.name.label('service_name')).\
+                    join(Service, ServiceStatistics.service_id == Service.id)
+                if date_filter:
+                    query = query.filter(ServiceStatistics.date == date_filter)
+                stats = query.order_by(ServiceStatistics.date.desc()).all()
+                data = [{
+                    'Date': s.ServiceStatistics.date,
+                    'Service': s.service_name,
+                    'Called Tickets': s.ServiceStatistics.called_tickets,
+                    'Finished Tickets': s.ServiceStatistics.finished_tickets,
+                    'Cancelled Tickets': s.ServiceStatistics.cancelled_tickets,
+                    'Redirected Tickets': s.ServiceStatistics.redirected_tickets,
+                    'Avg Wait Time (s)': s.ServiceStatistics.avg_wait_time,
+                    'Avg Service Time (s)': s.ServiceStatistics.avg_service_time
+                } for s in stats]
+                filename = f"service_statistics_{get_current_tashkent_time().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            else:
+                api.abort(400, "Invalid statistics type")
+
+            df = pd.DataFrame(data)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='Statistics')
+            output.seek(0)
+            logging.info(f"Exported {filename} with {len(data)} records")
+            return send_file(
+                output,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+        except Exception as e:
+            logging.error(f"Error exporting statistics: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+@ns.route('/ticket/<string:ticket_number>/status')
+class TicketStatus(Resource):
+    @api.doc(description='Get status of a ticket')  # исправлено
+    def get(self, ticket_number):
+        db_session = SessionLocal()
+        try:
+            ticket = db_session.query(Ticket, Service.name.label('service_name'), Operator.name.label('operator_name')).\
+                join(Service, Ticket.service_id == Service.id).\
+                outerjoin(Operator, Ticket.operator_id == Operator.id).\
+                filter(Ticket.number == ticket_number).first()
+            if not ticket:
+                api.abort(404, "Ticket not found")
+            queue_position = db_session.query(Ticket).\
+                Ticket_status(Ticket.status == 'waiting', Ticket.service_id == ticket.Ticket.service_id).\
+                filter(Ticket.created_at <= ticket.Ticket.created_at).count()
+            return {
+                "ticket_number": ticket.Ticket.number,
+                "status": ticket.Ticket.status,
+                "service_name": ticket.service_name,
+                "operator_name": ticket.operator_name,
+                "created_at": ticket.Ticket.created_at.isoformat(),
+                "called_at": ticket.Ticket.called_at.isoformat() if ticket.Ticket.called_at else None,
+                "finished_at": ticket.Ticket.finished_at.isoformat() if ticket.Ticket.finished_at else None,
+                "queue_position": queue_position if ticket.Ticket.status == 'waiting' else None
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/admin/tickets')
+class AdminTickets(Resource):
+    @api.doc(description='Get all tickets for admin')
+    @admin_required
+    def get(self):
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        status = request.args.get('status')
+        db_session = SessionLocal()
+        try:
+            query = db_session.query(Ticket, Service.name.label('service_name'), Operator.name.label('operator_name')).\
+                join(Service, Ticket.service_id == Service.id).\
+                outerjoin(Operator, Ticket.operator_id == Operator.id)
+            if status:
+                query = query.filter(Ticket.status == status)
+            tickets = query.order_by(Ticket.created_at.desc()).offset((page-1)*per_page).limit(per_page).all()
+            total = query.count()
+            return {
+                "tickets": [{
+                    "id": t.Ticket.id,
+                    "number": t.Ticket.number,
+                    "status": t.Ticket.status,
+                    "service_name": t.service_name,
+                    "operator_name": t.operator_name,
+                    "created_at": t.Ticket.created_at.isoformat(),
+                    "called_at": t.Ticket.called_at.isoformat() if t.Ticket.called_at else None,
+                    "finished_at": t.Ticket.finished_at.isoformat() if t.Ticket.finished_at else None,
+                    "priority": t.Ticket.priority
+                } for t in tickets],
+                "total": total,
+                "page": page,
+                "per_page": per_page
+            }
+        finally:
+            db_session.close()
+
+@ns.route('/admin/tickets/<string:ticket_number>')
+class AdminTicket(Resource):
+    @api.doc(description='Update ticket priority or status')
+    @admin_required
+    def put(self, ticket_number):
+        data = request.get_json()
+        priority = data.get('priority')
+        status = data.get('status')
+        if priority is None and status is None:
+            api.abort(400, "Priority or status must be provided")
+        db_session = SessionLocal()
+        try:
+            ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number).first()
+            if not ticket:
+                api.abort(404, "Ticket not found")
+            if priority is not None:
+                ticket.priority = priority
+            if status:
+                ticket.status = status
+                if status == 'called' and not ticket.called_at:
+                    ticket.called_at = get_current_tashkent_time()
+                elif status == 'finished' and not ticket.finished_at:
+                    ticket.finished_at = get_current_tashkent_time()
+            db_session.commit()
+            logging.info(f"Admin updated ticket {ticket_number}: priority={priority}, status={status}")
+            socketio.emit('update_queue', {'ticket': ticket_number, 'operator_id': ticket.operator_id or 'N/A'})
+            return {"message": "Ticket updated successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error updating ticket {ticket_number}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+    @api.doc(description='Delete a ticket')
+    @admin_required
+    def delete(self, ticket_number):
+        db_session = SessionLocal()
+        try:
+            ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number).first()
+            if not ticket:
+                api.abort(404, "Ticket not found")
+            db_session.delete(ticket)
+            db_session.commit()
+            logging.info(f"Admin deleted ticket: {ticket_number}")
+            socketio.emit('remove_ticket', {'ticket': ticket_number, 'operator_id': ticket.operator_id or 'N/A'})
+            return {"message": "Ticket deleted successfully"}, 200
+        except Exception as e:
+            db_session.rollback()
+            logging.error(f"Error deleting ticket {ticket_number}: {e}")
+            api.abort(500, str(e))
+        finally:
+            db_session.close()
+
+# --- Socket.IO Events ---
+
+@socketio.on('connect')
+def handle_connect():
+    logging.info("Client connected to Socket.IO")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    logging.info("Client disconnected from Socket.IO")
+
+@socketio.on('join_chat')
+def handle_join_chat(data):
+    ticket_number = data.get('ticket_number')
+    sender_type = data.get('sender_type')
+    sender_id = data.get('sender_id')
+    if not ticket_number or not sender_type or not sender_id:
+        emit('error', {'message': 'Missing required fields'})
+        return
+    join_room(ticket_number)
+    logging.info(f"{sender_type} {sender_id} joined chat for ticket {ticket_number}")
+
+@socketio.on('send_message')
+def handle_send_message(data):
+    ticket_number = data.get('ticket_number')
+    sender_type = data.get('sender_type')
+    sender_id = data.get('sender_id')
+    content = data.get('content')
+    file_url = data.get('file_url')
+    file_type = data.get('file_type')
+
+    if not ticket_number or not sender_type or not sender_id or (not content and not file_url):
+        emit('error', {'message': 'Missing required fields'})
+        return
+
+    db_session = SessionLocal()
+    try:
+        ticket = db_session.query(Ticket).filter(Ticket.number == ticket_number).first()
+        if not ticket:
+            emit('error', {'message': 'Ticket not found'})
+            return
+        message = ChatMessage(
+            ticket_number=ticket_number,
+            sender_type=sender_type,
+            sender_id=sender_id,
+            content=content,
+            file_url=file_url,
+            file_type=file_type,
+            created_at=get_current_tashkent_time()
+        )
+        db_session.add(message)
+        db_session.commit()
+        logging.info(f"Message sent in chat for ticket {ticket_number} by {sender_type} {sender_id}")
+
+        message_data = {
+            'ticket_number': ticket_number,
+            'sender_type': sender_type,
+            'sender_id': sender_id,
+            'content': content,
+            'file_url': file_url,
+            'file_type': file_type,
+            'created_at': message.created_at.isoformat()
+        }
+        emit('new_message', message_data, room=ticket_number)
+
+        if sender_type == 'client' and ticket.operator_id:
+            operator = db_session.query(Operator).filter(Operator.id == ticket.operator_id).first()
+            if operator and operator.telegram_chat_id:
+                notification = (
+                    f"Yangi xabar: <b>{ticket_number}</b> talonidan.\n"
+                    f"{content or 'Fayl yuborildi'}"
+                )
+                send_telegram_message_async.delay(operator.telegram_chat_id, notification)
+        elif sender_type == 'operator' and ticket.client_telegram_chat_id:
+            notification = (
+                f"Operator xabari: <b>{ticket_number}</b> talonida.\n"
+                f"{content or 'Fayl yuborildi'}"
+            )
+            send_telegram_message_async.delay(ticket.client_telegram_chat_id, notification)
+    except Exception as e:
+        db_session.rollback()
+        logging.error(f"Error sending message for ticket {ticket_number}: {e}")
+        emit('error', {'message': str(e)})
+    finally:
+        db_session.close()
+
+# --- Run Application ---
 
 if __name__ == '__main__':
     init_db()
-    socketio.run(app, host=os.getenv('HOST', '0.0.0.0'), port=int(os.getenv('PORT', 5000)),
-                 debug=os.getenv('DEBUG', 'True') == 'True')
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)

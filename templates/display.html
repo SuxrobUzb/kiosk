@@ -15,6 +15,8 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            color: var(--text); /* Apply text color from theme */
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         :root {
             --bg: #f4f7fa;
@@ -22,6 +24,7 @@
             --card-bg: #ffffff;
             --primary: #1a73e8;
             --secondary: #34c759;
+            --border-color: #e2e8f0;
         }
         body.dark {
             --bg: #1a202c;
@@ -29,6 +32,15 @@
             --card-bg: #2d3748;
             --primary: #63b3ed;
             --secondary: #68d391;
+            --border-color: #4a5568;
+        }
+        body.daltonic {
+            --bg: #f0f0f0;
+            --text: #333333;
+            --card-bg: #cccccc;
+            --primary: #007bff;
+            --secondary: #28a745;
+            --border-color: #999999;
         }
         body {
             background: var(--bg);
@@ -40,6 +52,7 @@
             background: var(--primary);
             padding: 16px 24px;
             color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         .header img { width: 80px; margin-right: 20px; border-radius: 8px; transition: transform 0.5s; }
         .header img:hover { transform: rotate(360deg); }
@@ -49,6 +62,7 @@
             display: flex;
             padding: 20px;
             gap: 20px;
+            overflow: hidden; /* Prevent scrollbars from content */
         }
         .video-section {
             width: 60%;
@@ -58,9 +72,26 @@
             display: flex;
             flex-direction: column;
             transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden; /* Ensure video stays within bounds */
         }
-        .video-section.fullscreen { width: 100%; padding: 0; border-radius: 0; }
-        #video-player { width: 100%; height: 85%; border-radius: 8px; background: #000; }
+        .video-section.fullscreen {
+            width: 100%;
+            padding: 0;
+            border-radius: 0;
+            flex: 1; /* Take full height */
+        }
+        #video-player {
+            width: 100%;
+            height: 85%; /* Adjusted for datetime below */
+            border-radius: 8px;
+            background: #000;
+            object-fit: cover; /* Ensure video covers the area */
+        }
+        .video-section.fullscreen #video-player {
+            height: 100%; /* Full height when fullscreen */
+            border-radius: 0;
+        }
         .datetime {
             text-align: center;
             font-size: 16px;
@@ -69,19 +100,39 @@
             background: #edf2f7;
             border-radius: 8px;
             margin-top: 10px;
+            transition: background-color 0.3s ease;
         }
         .dark .datetime { background: #4a5568; }
-        .queue-section { width: 40%; transition: all 0.3s; }
-        .queue-section.hidden { width: 0; opacity: 0; }
+        .queue-section {
+            width: 40%;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+        }
+        .queue-section.hidden {
+            width: 0;
+            opacity: 0;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
             background: var(--card-bg);
             border-radius: 12px;
             overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            flex: 1; /* Allow table to grow */
+            transition: background-color 0.3s ease;
         }
-        th, td { padding: 16px; text-align: center; font-size: 18px; border-bottom: 1px solid #e2e8f0; }
-        .dark th, .dark td { border-bottom: 1px solid #4a5568; }
+        th, td {
+            padding: 16px;
+            text-align: center;
+            font-size: 18px;
+            border-bottom: 1px solid var(--border-color);
+            transition: border-color 0.3s ease;
+        }
         th { background: var(--primary); color: #ffffff; font-weight: 600; }
         tr:last-child td { border-bottom: none; }
         tr:hover { background: #f7fafc; }
@@ -89,15 +140,22 @@
         .latest-call {
             background: #ffedd5;
             font-weight: bold;
-            animation: blink 1s infinite;
+            animation: pulse 1s infinite; /* Changed to pulse for smoother effect */
         }
         .dark .latest-call { background: #7c3aed; }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.02); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
         .controls {
             position: absolute;
             top: 16px;
             right: 24px;
             display: flex;
             gap: 10px;
+            z-index: 10; /* Ensure controls are above other content */
         }
         .lang-btn, .theme-toggle {
             padding: 6px 12px;
@@ -128,115 +186,267 @@
             z-index: 1000;
         }
         @keyframes blink { 50% { opacity: 0.7; } }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                text-align: center;
+                padding: 10px;
+            }
+            .header img {
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+            .header h1 {
+                font-size: 20px;
+            }
+            .content {
+                flex-direction: column;
+                padding: 10px;
+                gap: 10px;
+            }
+            .video-section, .queue-section {
+                width: 100%;
+                padding: 10px;
+            }
+            .queue-section.hidden {
+                display: none; /* Hide completely on small screens if no tickets */
+            }
+            th, td {
+                padding: 10px;
+                font-size: 14px;
+            }
+            .controls {
+                top: 10px;
+                right: 10px;
+                flex-direction: column;
+            }
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
 </head>
 <body>
     <div class="controls">
-        <button class="lang-btn active" onclick="setLanguage('uz_lat')">Uz (Lat)</button>
-        <button class="lang-btn" onclick="setLanguage('uz_cyr')">Ўз (Кирилл)</button>
-        <button class="lang-btn" onclick="setLanguage('ru')">Ру</button>
-        <button class="lang-btn" onclick="setLanguage('en')">En</button>
-        <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+        <div id="language-buttons" class="flex space-x-2">
+            <!-- Language buttons will be loaded here dynamically -->
+        </div>
+        <button id="themeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-md hover:scale-105 transition-transform duration-200">
+            🌙
+        </button>
     </div>
     <div class="header">
-        <img src="/static/logo.png" alt="Logotip">
-        <h1>Samarqand davlat universiteti Kattaqo'rg'on filiali</h1>
+        <img src="/static/images/logo.png" alt="Logotip">
+        <h1 id="headerTitle">Samarqand davlat universiteti Kattaqo'rg'on filiali</h1>
     </div>
     <div class="content">
         <div class="video-section" id="videoSection">
-            <video id="video-player" autoplay muted loop>
+            <video id="video-player" autoplay muted loop playsinline>
                 <source src="/static/videos/ad.mp4" type="video/mp4">
+                <!-- Fallback for browsers that don't support the video type -->
+                Your browser does not support the video tag.
             </video>
             <div class="datetime" id="datetime"></div>
         </div>
         <div class="queue-section" id="queueSection">
             <table id="queueTable">
-                <tr><th>Operator</th><th>Navbat</th></tr>
+                <thead>
+                    <tr>
+                        <th id="operatorColumnHeader">Operator</th>
+                        <th id="ticketColumnHeader">Navbat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Queue tickets will be loaded here -->
+                </tbody>
             </table>
         </div>
     </div>
     <audio id="notificationSound" src="/static/sounds/notification.mp3" preload="auto"></audio>
     <script>
-        const translations = {
-            uz_lat: { operator: "Operator", ticket: "Navbat" },
-            uz_cyr: { operator: "Оператор", ticket: "Навбат" },
-            ru: { operator: "Оператор", ticket: "Талон" },
-            en: { operator: "Operator", ticket: "Ticket" }
-        };
-        let currentLang = "uz_lat";
-        const serverUrl = "http://172.16.1.28:5000";
-        const socket = io(serverUrl);
+        const SERVER_URL = "{{ SERVER_URL }}"; // Ensure this matches your Flask server URL
+        let currentLang = localStorage.getItem('language') || 'uz_lat'; // Default to Uzbek Latin
+        let translations = {};
+        let latestCalledTicket = null; // To highlight the latest called ticket
+
+        const socket = io(SERVER_URL);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLanguages().then(() => {
+                loadTranslations(currentLang).then(() => {
+                    setLanguage(currentLang);
+                    updateQueueTable(); // Initial load
+                });
+            });
+            setupThemeToggle();
+            updateDateTime(); // Initial datetime display
+            setInterval(updateDateTime, 1000); // Update datetime every second
+            setInterval(updateQueueTable, 5000); // Refresh queue every 5 seconds
+        });
+
+        async function loadLanguages() {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/languages`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const languages = await response.json();
+                const langButtonsContainer = document.getElementById('language-buttons');
+                langButtonsContainer.innerHTML = ''; // Clear existing buttons
+
+                languages.forEach(lang => {
+                    const button = document.createElement('button');
+                    button.onclick = () => setLanguage(lang.lang_code);
+                    button.className = "lang-btn p-2 rounded-md bg-blue-500 text-white shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200";
+                    button.innerText = lang.display_name;
+                    langButtonsContainer.appendChild(button);
+                });
+            } catch (error) {
+                console.error("Error loading languages:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки языков:'} ${error.message}`, 'danger');
+            }
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`${SERVER_URL}/api/translations/${lang}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                translations = await response.json();
+            } catch (error) {
+                console.error("Error loading translations:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка загрузки переводов:'} ${error.message}`, 'danger');
+            }
+        }
 
         function setLanguage(lang) {
             currentLang = lang;
-            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active"));
-            document.querySelector(`button[onclick="setLanguage('${lang}')"]`).classList.add("active");
-            updateQueueTable();
+            localStorage.setItem('language', lang);
+            document.querySelectorAll(".lang-btn").forEach(btn => btn.classList.remove("active", "bg-blue-700"));
+            const activeButton = Array.from(document.querySelectorAll(".lang-btn")).find(btn => btn.onclick.toString().includes(`setLanguage('${lang}')`));
+            if (activeButton) {
+                activeButton.classList.add("active", "bg-blue-700");
+            }
+            
+            // Update all translatable elements on this page
+            document.title = translations.queue_display_title || 'Navbat';
+            document.getElementById("headerTitle").innerText = translations.university_name || 'Samarqand davlat universiteti Kattaqo\'rg\'on filiali';
+            document.getElementById("operatorColumnHeader").innerText = translations.operator_column || 'Operator';
+            document.getElementById("ticketColumnHeader").innerText = translations.ticket_column || 'Navbat';
+
+            updateQueueTable(); // Refresh queue table to apply new language to operator/ticket names
         }
 
-        function toggleTheme() {
-            document.body.classList.toggle("dark");
-            const isDark = document.body.classList.contains("dark");
-            localStorage.setItem("theme", isDark ? "dark" : "light");
-            document.querySelector(".theme-toggle").innerText = isDark ? "☀️" : "🌙";
+        function setupThemeToggle() {
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const themes = ['light', 'dark', 'daltonic'];
+            let currentThemeIndex = themes.indexOf(localStorage.getItem('theme') || 'light');
+            if (currentThemeIndex === -1) currentThemeIndex = 0; // Default to light if invalid theme in localStorage
+
+            const applyTheme = (theme) => {
+                document.body.classList.remove(...themes); // Remove all theme classes
+                document.body.classList.add(theme);
+                localStorage.setItem('theme', theme);
+                themeToggleBtn.innerText = {
+                    'light': '🌙',
+                    'dark': '☀️',
+                    'daltonic': '👁️'
+                }[theme];
+            };
+
+            // Apply initial theme
+            applyTheme(themes[currentThemeIndex]);
+
+            themeToggleBtn.addEventListener('click', () => {
+                currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+                applyTheme(themes[currentThemeIndex]);
+            });
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type === 'danger' ? 'bg-red-500' : 'bg-green-500'} text-white px-4 py-2 rounded-lg shadow-md`;
+            notification.innerText = message;
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
         }
 
         function updateDateTime() {
             const now = new Date();
-            document.getElementById("datetime").textContent = now.toLocaleString();
+            document.getElementById("datetime").textContent = now.toLocaleString(currentLang.replace('_', '-'), {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            });
         }
-        setInterval(updateDateTime, 1000);
-        updateDateTime();
 
         socket.on("connect", () => console.log("Connected to server"));
         socket.on("disconnect", () => console.log("Disconnected from server"));
 
         socket.on("update_queue", function(data) {
+            // This event is emitted when a ticket is called by an operator
             if (data.ticket && data.operator_id) {
+                latestCalledTicket = data.ticket; // Store the latest called ticket
                 const audio = document.getElementById("notificationSound");
                 audio.play().catch(err => console.error("Audio play error:", err));
-                updateQueueTable(data.ticket);
+                updateQueueTable(); // Refresh the table to show the new called ticket
             }
         });
 
         socket.on("remove_ticket", function(data) {
-            updateQueueTable();
+            // This event is emitted when a ticket is finished or cancelled
+            if (data.ticket) {
+                if (latestCalledTicket === data.ticket) {
+                    latestCalledTicket = null; // Clear if the removed ticket was the latest called
+                }
+                updateQueueTable(); // Refresh the table
+            }
         });
 
-        async function updateQueueTable(latestTicket = null) {
+        async function updateQueueTable() {
             try {
-                const response = await fetch(`${serverUrl}/get_queue`);
+                const response = await fetch(`${SERVER_URL}/api/queue`);
                 if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
                 const tickets = await response.json();
-                const table = document.getElementById("queueTable");
-                table.innerHTML = `<tr><th>${translations[currentLang].operator}</th><th>${translations[currentLang].ticket}</th></tr>`;
+                const tableBody = document.querySelector("#queueTable tbody");
+                tableBody.innerHTML = ''; // Clear existing rows
+
+                const videoSection = document.getElementById("videoSection");
+                const queueSection = document.getElementById("queueSection");
 
                 if (tickets.length === 0) {
-                    document.getElementById("videoSection").classList.add("fullscreen");
-                    document.getElementById("queueSection").classList.add("hidden");
+                    videoSection.classList.add("fullscreen");
+                    queueSection.classList.add("hidden");
                 } else {
-                    document.getElementById("videoSection").classList.remove("fullscreen");
-                    document.getElementById("queueSection").classList.remove("hidden");
+                    videoSection.classList.remove("fullscreen");
+                    queueSection.classList.remove("hidden");
                     tickets.forEach(ticket => {
                         const row = document.createElement("tr");
-                        if (ticket.ticket === latestTicket) row.classList.add("latest-call");
-                        row.innerHTML = `<td>${ticket.operator_name || 'N/A'}</td><td>${ticket.ticket}</td>`;
-                        table.appendChild(row);
+                        // Add 'latest-call' class if this is the most recently called ticket
+                        if (ticket.number === latestCalledTicket) {
+                            row.classList.add("latest-call");
+                        }
+                        row.innerHTML = `<td>${ticket.operator_name || translations.not_assigned || 'N/A'}</td><td>${ticket.number}</td>`;
+                        tableBody.appendChild(row);
                     });
                 }
             } catch (error) {
                 console.error("Error updating queue:", error);
+                showNotification(`${translations.error_fetch || 'Ошибка обновления очереди:'} ${error.message}`, 'danger');
             }
         }
 
+        // Initial theme setup (from localStorage)
         if (localStorage.getItem("theme") === "dark") {
             document.body.classList.add("dark");
-            document.querySelector(".theme-toggle").innerText = "☀️";
+            document.getElementById("themeToggle").innerText = "☀️";
+        } else if (localStorage.getItem("theme") === "daltonic") {
+            document.body.classList.add("daltonic");
+            document.getElementById("themeToggle").innerText = "👁️";
         }
-
-        updateQueueTable();
-        setInterval(updateQueueTable, 5000);
     </script>
 </body>
 </html>
